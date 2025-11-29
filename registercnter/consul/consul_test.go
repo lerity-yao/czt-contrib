@@ -14,7 +14,7 @@ import (
 func TestConsulRegisterTTL(t *testing.T) {
 	// Set shorter TTL to speed up testing
 	conf := Conf{
-		Host:      "127.0.0.1:8500",
+		Host:      "127.0.0.1:8501",
 		Key:       "test-service",
 		TTL:       5,
 		CheckType: "ttl",

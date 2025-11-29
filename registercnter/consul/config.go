@@ -9,9 +9,9 @@ const (
 	allEths       = "0.0.0.0"
 	envPodIP      = "POD_IP"
 	consulTags    = "consul_tags"
-	checkTypeTTL  = "ttl"
-	checkTypeHttp = "http"
-	checkTypeGrpc = "grpc"
+	CheckTypeTTL  = "ttl"
+	CheckTypeHttp = "http"
+	CheckTypeGrpc = "grpc"
 	healthPort    = 6060
 	healthPath    = "/healthz"
 )
@@ -48,7 +48,7 @@ func (c Conf) Validate() error {
 	}
 
 	if c.CheckType == "" {
-		c.CheckType = checkTypeTTL
+		c.CheckType = CheckTypeTTL
 	}
 	if c.TTL == 0 {
 		c.TTL = 20
@@ -67,9 +67,9 @@ func (c Conf) Validate() error {
 	}
 
 	switch c.CheckType {
-	case checkTypeTTL:
-	case checkTypeGrpc:
-	case checkTypeHttp:
+	case CheckTypeTTL:
+	case CheckTypeGrpc:
+	case CheckTypeHttp:
 		if c.CheckHttp.Method == "" {
 			c.CheckHttp.Method = "GET"
 		}
