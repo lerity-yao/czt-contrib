@@ -19,8 +19,9 @@ const (
 type CheckHttpConf struct {
 	Method string `json:",default=GET,options=GET|POST"`
 	Path   string `json:",default=/healthz"`
-	Host   string `json:",default=0.0.0.0:6060"`
+	Host   string `json:",default=0.0.0.0"`
 	Port   int    `json:",default=6060"`
+	Scheme string `json:",default=http,options=http|https"`
 }
 
 // Conf is the config item with the given key on etcd.
@@ -39,7 +40,7 @@ type Conf struct {
 }
 
 // Validate validates c.
-func (c Conf) Validate() error {
+func (c *Conf) Validate() error {
 	if len(c.Host) == 0 {
 		return errors.New("empty consul hosts")
 	}
@@ -70,6 +71,9 @@ func (c Conf) Validate() error {
 	case CheckTypeTTL:
 	case CheckTypeGrpc:
 	case CheckTypeHttp:
+		if c.CheckHttp.Scheme == "" {
+			c.CheckHttp.Scheme = "http"
+		}
 		if c.CheckHttp.Method == "" {
 			c.CheckHttp.Method = "GET"
 		}
@@ -80,7 +84,7 @@ func (c Conf) Validate() error {
 			c.CheckHttp.Port = healthPort
 		}
 		if c.CheckHttp.Host == "" {
-			c.CheckHttp.Host = fmt.Sprintf("0.0.0.0:%d", c.CheckHttp.Port)
+			c.CheckHttp.Host = fmt.Sprintf("0.0.0.0")
 		}
 	default:
 		return fmt.Errorf("unknown check type: %s", c.CheckType)

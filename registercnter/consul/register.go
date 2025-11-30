@@ -17,13 +17,11 @@ import (
 
 type (
 	Client interface {
-		Register() error
-		Deregister() error
+		RegisterService() error
 		DeregisterService() error
-		IsRegistered() (bool, error)
 		GetServiceID() string
 		GetRegistration() *api.AgentServiceRegistration
-		UpdateStatus(status string) error
+		GetServiceClient() *api.Client
 	}
 
 	CommonClient struct {
@@ -52,6 +50,8 @@ type (
 	MonitorFunc func(cc *CommonClient, state *MonitorState) error
 
 	ServiceOption func(*CommonClient)
+
+	HealthCheckAction func(cc *CommonClient) error
 )
 
 func MustNewService(listenOn string, c Conf, opts ...ServiceOption) Client {
@@ -102,44 +102,20 @@ func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error) 
 	return service, nil
 }
 
-func (cc *CommonClient) Register() error {
-	err := cc.registerServiceWithHealthCheck()
+func (cc *CommonClient) RegisterService() error {
+	err := cc.registerServiceWithPassingHealth()
 	if err != nil {
 		return err
 	}
 
-	switch cc.consulConf.CheckType {
-	case CheckTypeTTL:
-		cc.monitorMutex.RLock()
-		hasNoFuncs := len(cc.monitorFuncs) == 0
-		cc.monitorMutex.RUnlock()
-
-		if hasNoFuncs {
-			cc.monitorMutex.Lock()
-			// 再次检查，避免竞态条件
-			if len(cc.monitorFuncs) == 0 {
-				cc.monitorFuncs = append(cc.monitorFuncs, TTLCheckMonitorFunc())
-			}
-			cc.monitorMutex.Unlock()
-		}
-
-		// 读取monitorFuncs并复制切片避免并发修改问题
-		cc.monitorMutex.RLock()
-		funcsCopy := make([]MonitorFunc, len(cc.monitorFuncs))
-		copy(funcsCopy, cc.monitorFuncs)
-		cc.monitorMutex.RUnlock()
-
-		// 为每个监控函数启动独立的goroutine
-		cc.startMonitors(funcsCopy)
-	case CheckTypeGrpc:
-	case CheckTypeHttp:
-	default:
-		return fmt.Errorf("unknown check type: %s", cc.consulConf.CheckType)
+	err = cc.registerServiceMonitors()
+	if err != nil {
+		return err
 	}
 
 	proc.AddShutdownListener(func() {
 		cc.stopAllMonitors()
-		err := cc.DeregisterService()
+		err := cc.deleteRegisterService()
 		if err != nil {
 			logx.Errorf("deregister service %s error: %s", cc.serviceId, err.Error())
 		} else {
@@ -149,58 +125,52 @@ func (cc *CommonClient) Register() error {
 	return nil
 }
 
-func (cc *CommonClient) startMonitors(funcs []MonitorFunc) {
-	cc.stopChMutex.Lock()
-	defer cc.stopChMutex.Unlock()
-
-	for _, monitorFunc := range funcs {
-		stopCh := make(chan struct{})
-		cc.stopMonitorChs = append(cc.stopMonitorChs, stopCh)
-		go cc.monitorServiceStatus(monitorFunc, stopCh)
-	}
-}
-
-func (cc *CommonClient) stopAllMonitors() {
-	cc.stopChMutex.Lock()
-	defer cc.stopChMutex.Unlock()
-
-	for _, stopCh := range cc.stopMonitorChs {
-		close(stopCh)
-	}
-	cc.stopMonitorChs = make([]chan struct{}, 0)
-}
-
 func (cc *CommonClient) DeregisterService() error {
-	err := cc.apiClient.Agent().ServiceDeregister(cc.serviceId)
-	return err
-}
-
-func (cc *CommonClient) Deregister() error {
 	cc.stopAllMonitors()
-	return cc.DeregisterService()
-}
-
-func (cc *CommonClient) IsRegistered() (bool, error) {
-	_, _, err := cc.apiClient.Agent().Service(cc.serviceId, nil)
-	if err != nil {
-		if strings.Contains(err.Error(), "Service not found") {
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to get service %s: %v", cc.serviceId, err)
-	}
-	return true, nil
+	return cc.deleteRegisterService()
 }
 
 func (cc *CommonClient) GetServiceID() string {
 	return cc.serviceId
 }
 
-func (cc *CommonClient) UpdateStatus(status string) error {
-	return cc.apiClient.Agent().UpdateTTL(cc.serviceId, "", status)
+func (cc *CommonClient) GetServiceClient() *api.Client {
+	return cc.apiClient
 }
-
 func (cc *CommonClient) GetRegistration() *api.AgentServiceRegistration {
 	return cc.registration
+}
+
+func (cc *CommonClient) registerServiceWithPassingHealth() error {
+
+	_ = cc.deleteRegisterService()
+
+	time.Sleep(100 * time.Millisecond)
+
+	err := cc.registerService()
+	if err != nil {
+		return err
+	}
+
+	err = cc.setRegisterServiceHealthStatus(api.HealthPassing)
+	if err != nil {
+		_ = cc.deleteRegisterService()
+		return fmt.Errorf("register service %s id %s check error: %v",
+			cc.registration.Name, cc.registration.ID, err)
+	}
+
+	logx.Infof("Service %s id %s registered successfully", cc.registration.Name, cc.registration.ID)
+
+	return nil
+}
+
+func (cc *CommonClient) registerService() error {
+	err := cc.apiClient.Agent().ServiceRegister(cc.registration)
+	if err != nil {
+		return fmt.Errorf("register service %s id %s host to consul error: %s",
+			cc.registration.Name, cc.registration.ID, err.Error())
+	}
+	return nil
 }
 
 func (cc *CommonClient) clientRegistration() error {
@@ -219,7 +189,7 @@ func (cc *CommonClient) clientRegistration() error {
 			{
 				CheckID:                        cc.serviceId,                          // Service node name
 				TTL:                            fmt.Sprintf("%ds", cc.consulConf.TTL), // Health check interval
-				Status:                         "passing",
+				Status:                         api.HealthPassing,
 				DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", cc.consulConf.TTL*cc.consulConf.ExpiredTTL), // Deregistration time
 			},
 		}
@@ -227,15 +197,16 @@ func (cc *CommonClient) clientRegistration() error {
 	case CheckTypeGrpc:
 	case CheckTypeHttp:
 		// todo 可以考虑混合健康检查，例如TTL和HTTP
-		httpCheckHost := figureOutListenOn(cc.consulConf.CheckHttp.Host)
+		httpCheckHost := figureOutListenOn(fmt.Sprintf("%s:%d", cc.consulConf.CheckHttp.Host, cc.consulConf.CheckHttp.Port))
 		reg.Checks = []*api.AgentServiceCheck{
 			{
-				CheckID:                        cc.serviceId,                                                     // Service node name
-				HTTP:                           fmt.Sprintf("%s%s", httpCheckHost, cc.consulConf.CheckHttp.Path), // health check url
-				Method:                         cc.consulConf.CheckHttp.Method,                                   // health check method
-				Interval:                       fmt.Sprintf("%ds", cc.consulConf.TTL),                            // health check interval
-				Timeout:                        fmt.Sprintf("%ds", cc.consulConf.CheckTimeout),                   // health check timeout
-				DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", cc.consulConf.TTL*cc.consulConf.ExpiredTTL),   // Deregistration time
+				CheckID:                        cc.serviceId,                                                                                          // Service node name
+				HTTP:                           fmt.Sprintf("%s://%s%s", cc.consulConf.CheckHttp.Scheme, httpCheckHost, cc.consulConf.CheckHttp.Path), // health check url
+				Method:                         cc.consulConf.CheckHttp.Method,                                                                        // health check method
+				Interval:                       fmt.Sprintf("%ds", cc.consulConf.TTL),                                                                 // health check interval
+				Timeout:                        fmt.Sprintf("%ds", cc.consulConf.CheckTimeout),                                                        // health check timeout
+				DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", cc.consulConf.TTL*cc.consulConf.ExpiredTTL),
+				Status:                         api.HealthPassing,
 			},
 		}
 	default:
@@ -245,43 +216,116 @@ func (cc *CommonClient) clientRegistration() error {
 	return nil
 }
 
-func (cc *CommonClient) registerServiceWithHealthCheck() error {
+func (cc *CommonClient) deleteRegisterService() error {
+	err := cc.apiClient.Agent().ServiceDeregister(cc.serviceId)
+	return err
+}
 
-	err := cc.DeregisterService()
-
-	if err != nil {
-		logx.Errorf("deregister service %s error: %s", cc.serviceId, err.Error())
-	} else {
-		logx.Infof("Service %s deregistered successfully", cc.serviceId)
+func (cc *CommonClient) setRegisterServiceHealthStatus(status string) error {
+	switch cc.consulConf.CheckType {
+	case CheckTypeTTL:
+		check := api.AgentServiceCheck{
+			TTL:                            fmt.Sprintf("%ds", cc.consulConf.TTL),
+			Status:                         status,
+			DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", cc.consulConf.TTL*cc.consulConf.ExpiredTTL),
+		}
+		return cc.apiClient.Agent().CheckRegister(&api.AgentCheckRegistration{
+			ID:                cc.registration.ID,
+			Name:              cc.registration.Name,
+			ServiceID:         cc.registration.ID,
+			AgentServiceCheck: check,
+		})
+	case CheckTypeHttp:
+		httpCheckHost := figureOutListenOn(cc.consulConf.CheckHttp.Host)
+		check := api.AgentServiceCheck{
+			HTTP:                           fmt.Sprintf("%s://%s%s", cc.consulConf.CheckHttp.Scheme, httpCheckHost, cc.consulConf.CheckHttp.Path), // health check url
+			Method:                         cc.consulConf.CheckHttp.Method,                                                                        // health check method
+			Interval:                       fmt.Sprintf("%ds", cc.consulConf.TTL),                                                                 // health check interval
+			Timeout:                        fmt.Sprintf("%ds", cc.consulConf.CheckTimeout),                                                        // health check timeout
+			DeregisterCriticalServiceAfter: fmt.Sprintf("%ds", cc.consulConf.TTL*cc.consulConf.ExpiredTTL),                                        // Deregistration time
+			Status:                         status,
+		}
+		return cc.apiClient.Agent().CheckRegister(&api.AgentCheckRegistration{
+			ID:                cc.registration.ID,
+			Name:              cc.registration.Name,
+			ServiceID:         cc.registration.ID,
+			AgentServiceCheck: check,
+		})
+	case CheckTypeGrpc:
+	default:
+		return fmt.Errorf("unknown check type: %s", cc.consulConf.CheckType)
 	}
-
-	time.Sleep(100 * time.Millisecond)
-
-	err = cc.registerService()
-	if err != nil {
-		return err
-	}
-
-	// health check register
-	err = cc.isServiceHealthyRegistered()
-	if err != nil {
-		_ = cc.DeregisterService()
-		return fmt.Errorf("register service %s id %s check error: %v",
-			cc.registration.Name, cc.registration.ID, err)
-	}
-
-	logx.Infof("Service %s id %s registered successfully", cc.registration.Name, cc.registration.ID)
 
 	return nil
 }
 
-func (cc *CommonClient) registerService() error {
-	err := cc.apiClient.Agent().ServiceRegister(cc.registration)
+func (cc *CommonClient) getRegisterServiceHealthStatus() (string, error) {
+	service, _, err := cc.apiClient.Agent().Service(cc.serviceId, nil)
 	if err != nil {
-		return fmt.Errorf("initial register service %s id %s host to consul error: %s",
-			cc.registration.Name, cc.registration.ID, err.Error())
+		return "", fmt.Errorf("failed to get service %s: %v", cc.serviceId, err)
 	}
+
+	serviceEntries, _, err := cc.apiClient.Health().Service(service.Service, "", false, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to get service %s health: %v", cc.serviceId, err)
+	}
+
+	for _, entry := range serviceEntries {
+		if entry.Service.ID == cc.serviceId {
+			return entry.Checks.AggregatedStatus(), nil
+		}
+	}
+	return "", fmt.Errorf("service %s not found in health check results", cc.serviceId)
+}
+
+func (cc *CommonClient) registerServiceHealthStatus(status string) (bool, error) {
+	ss, err := cc.getRegisterServiceHealthStatus()
+	if err != nil && ss == status {
+		return true, err
+	}
+	return false, err
+}
+
+func (cc *CommonClient) registerServiceMonitors() error {
+	cc.monitorMutex.RLock()
+	hasNoFuncs := len(cc.monitorFuncs) == 0
+	cc.monitorMutex.RUnlock()
+
+	if hasNoFuncs {
+		cc.monitorMutex.Lock()
+		if len(cc.monitorFuncs) == 0 {
+			switch cc.consulConf.CheckType {
+			case CheckTypeTTL:
+				cc.monitorFuncs = append(cc.monitorFuncs, TTLCheckMonitorFunc())
+			case CheckTypeGrpc:
+				cc.monitorFuncs = append(cc.monitorFuncs, HttpCheckMonitorFunc())
+			case CheckTypeHttp:
+				cc.monitorFuncs = append(cc.monitorFuncs, HttpCheckMonitorFunc())
+			default:
+				return fmt.Errorf("unknown check type: %s", cc.consulConf.CheckType)
+			}
+
+		}
+		cc.monitorMutex.Unlock()
+	}
+
+	cc.monitorMutex.RLock()
+	funcsCopy := make([]MonitorFunc, len(cc.monitorFuncs))
+	copy(funcsCopy, cc.monitorFuncs)
+	cc.monitorMutex.RUnlock()
+	cc.startMonitors(funcsCopy)
 	return nil
+}
+
+func (cc *CommonClient) startMonitors(funcs []MonitorFunc) {
+	cc.stopChMutex.Lock()
+	defer cc.stopChMutex.Unlock()
+
+	for _, monitorFunc := range funcs {
+		stopCh := make(chan struct{})
+		cc.stopMonitorChs = append(cc.stopMonitorChs, stopCh)
+		go cc.monitorServiceStatus(monitorFunc, stopCh)
+	}
 }
 
 func (cc *CommonClient) monitorServiceStatus(monitorFunc MonitorFunc, stopCh <-chan struct{}) {
@@ -323,31 +367,14 @@ func (cc *CommonClient) monitorServiceStatus(monitorFunc MonitorFunc, stopCh <-c
 
 }
 
-func (cc *CommonClient) isServiceHealthyRegistered() error {
-	service, _, err := cc.apiClient.Agent().Service(cc.serviceId, nil)
-	if err != nil {
-		return fmt.Errorf("failed to get service %s: %v", cc.serviceId, err)
-	}
+func (cc *CommonClient) stopAllMonitors() {
+	cc.stopChMutex.Lock()
+	defer cc.stopChMutex.Unlock()
 
-	serviceEntries, _, err := cc.apiClient.Health().Service(service.Service, "", false, nil)
-	if err != nil {
-		return fmt.Errorf("failed to get service %s health: %v", cc.serviceId, err)
+	for _, stopCh := range cc.stopMonitorChs {
+		close(stopCh)
 	}
-
-	healthy := false
-	for _, entry := range serviceEntries {
-		if entry.Service.ID == cc.serviceId {
-			status := entry.Checks.AggregatedStatus()
-			if status == api.HealthPassing {
-				healthy = true
-			}
-		}
-	}
-
-	if !healthy {
-		return fmt.Errorf("service %s is not healthy", cc.serviceId)
-	}
-	return nil
+	cc.stopMonitorChs = make([]chan struct{}, 0)
 }
 
 func (s *MonitorState) Close() {
@@ -359,29 +386,29 @@ func (s *MonitorState) Close() {
 	}
 }
 
-func TTLCheckMonitorFunc() MonitorFunc {
+func createMonitorFunc(action HealthCheckAction, successMessage string) MonitorFunc {
 	return func(cc *CommonClient, state *MonitorState) error {
-
-		err := cc.apiClient.Agent().UpdateTTL(cc.serviceId, "", "passing")
+		// 执行健康检查动作
+		err := action(cc)
 		if err == nil {
-			logx.Infof("Service %s TTL updated successfully", cc.serviceId)
+			logx.Infof(successMessage, cc.serviceId)
 			state.RetryCount = 0
 			state.BackoffTime = 1 * time.Second
 			state.Ticker.Reset(state.OriginalTTL)
 			return nil
 		}
 
-		registered := false
-		err = cc.isServiceHealthyRegistered()
+		registered, err := cc.registerServiceHealthStatus(api.HealthPassing)
 		if err != nil {
 			logx.Error(err)
 		} else {
 			registered = true
 		}
 
+		// 重试逻辑
 		if !registered && state.RetryCount < state.MaxRetries {
 			logx.Infof("Attempting to re-register service %s (retry %d/%d)...", cc.serviceId, state.RetryCount+1, state.MaxRetries)
-			err = cc.registerServiceWithHealthCheck()
+			err = cc.registerServiceWithPassingHealth()
 			if err != nil {
 				logx.Errorf("Failed to re-register service %s: %v. Retrying in %v", cc.serviceId, err, state.BackoffTime)
 				state.RetryCount++
@@ -402,6 +429,7 @@ func TTLCheckMonitorFunc() MonitorFunc {
 			return nil
 		}
 
+		// 达到最大重试次数
 		if !registered {
 			logx.Errorf("Max retries reached for service %s. Resetting retry counter and backoff time.", cc.serviceId)
 			state.RetryCount = 0
@@ -411,6 +439,31 @@ func TTLCheckMonitorFunc() MonitorFunc {
 
 		return nil
 	}
+}
+
+func TTLCheckMonitorFunc() MonitorFunc {
+	return createMonitorFunc(
+		func(cc *CommonClient) error {
+			return cc.apiClient.Agent().UpdateTTL(cc.serviceId, "", "passing")
+		},
+		"Service %s TTL updated successfully",
+	)
+}
+
+func HttpCheckMonitorFunc() MonitorFunc {
+	return createMonitorFunc(
+		func(cc *CommonClient) error {
+			ok, err := cc.registerServiceHealthStatus(api.HealthPassing)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("service %s health check failed", cc.serviceId)
+			}
+			return nil
+		},
+		"Service %s health check passed",
+	)
 }
 
 func figureOutListenOn(listenOn string) string {
