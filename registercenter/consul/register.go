@@ -47,11 +47,9 @@ type (
 		Mutex          sync.RWMutex
 	}
 
-	MonitorFunc func(cc *CommonClient, state *MonitorState) error
+	MonitorFunc func(cc *CommonClient, stopChan <-chan struct{})
 
 	ServiceOption func(*CommonClient)
-
-	HealthCheckAction func(cc *CommonClient) error
 )
 
 func MustNewService(listenOn string, c Conf, opts ...ServiceOption) Client {
@@ -144,7 +142,6 @@ func (cc *CommonClient) GetRegistration() *api.AgentServiceRegistration {
 func (cc *CommonClient) registerServiceWithPassingHealth() error {
 
 	_ = cc.deleteRegisterService()
-
 	time.Sleep(100 * time.Millisecond)
 
 	err := cc.registerService()
@@ -280,10 +277,15 @@ func (cc *CommonClient) getRegisterServiceHealthStatus() (string, error) {
 
 func (cc *CommonClient) registerServiceHealthStatus(status string) (bool, error) {
 	ss, err := cc.getRegisterServiceHealthStatus()
-	if err != nil && ss == status {
-		return true, err
+	if err != nil {
+		return false, err
 	}
-	return false, err
+
+	if ss != status {
+		return false, fmt.Errorf("service status is %s, not %s", ss, status)
+	}
+
+	return true, nil
 }
 
 func (cc *CommonClient) registerServiceMonitors() error {
@@ -324,47 +326,8 @@ func (cc *CommonClient) startMonitors(funcs []MonitorFunc) {
 	for _, monitorFunc := range funcs {
 		stopCh := make(chan struct{})
 		cc.stopMonitorChs = append(cc.stopMonitorChs, stopCh)
-		go cc.monitorServiceStatus(monitorFunc, stopCh)
+		go monitorFunc(cc, stopCh)
 	}
-}
-
-func (cc *CommonClient) monitorServiceStatus(monitorFunc MonitorFunc, stopCh <-chan struct{}) {
-	var ttlTicker time.Duration
-	if cc.consulConf.TTL > 0 {
-		ttlTicker = time.Duration(cc.consulConf.TTL-1) * time.Second
-		if ttlTicker < time.Second {
-			ttlTicker = time.Second
-		}
-	} else {
-		ttlTicker = 1 * time.Second
-	}
-
-	state := &MonitorState{
-		RetryCount:     0,
-		BackoffTime:    1 * time.Second,
-		MaxRetries:     5,
-		MaxBackoffTime: 30 * time.Second,
-		OriginalTTL:    ttlTicker,
-		Ticker:         time.NewTicker(ttlTicker),
-	}
-	defer state.Close()
-
-	for {
-		select {
-		case <-state.Ticker.C:
-			state.Mutex.Lock()
-			err := monitorFunc(cc, state)
-			state.Mutex.Unlock()
-
-			if err != nil {
-				logx.Errorf("Monitor function error for service %s: %v", cc.serviceId, err)
-			}
-		case <-stopCh:
-			logx.Infof("Service monitor for %s stopped gracefully", cc.serviceId)
-			return
-		}
-	}
-
 }
 
 func (cc *CommonClient) stopAllMonitors() {
@@ -386,84 +349,177 @@ func (s *MonitorState) Close() {
 	}
 }
 
-func createMonitorFunc(action HealthCheckAction, successMessage string) MonitorFunc {
-	return func(cc *CommonClient, state *MonitorState) error {
-		// 执行健康检查动作
-		err := action(cc)
-		if err == nil {
-			logx.Infof(successMessage, cc.serviceId)
-			state.RetryCount = 0
-			state.BackoffTime = 1 * time.Second
-			state.Ticker.Reset(state.OriginalTTL)
-			return nil
-		}
-
-		registered, err := cc.registerServiceHealthStatus(api.HealthPassing)
-		if err != nil {
-			logx.Error(err)
-		} else {
-			registered = true
-		}
-
-		// 重试逻辑
-		if !registered && state.RetryCount < state.MaxRetries {
-			logx.Infof("Attempting to re-register service %s (retry %d/%d)...", cc.serviceId, state.RetryCount+1, state.MaxRetries)
-			err = cc.registerServiceWithPassingHealth()
-			if err != nil {
-				logx.Errorf("Failed to re-register service %s: %v. Retrying in %v", cc.serviceId, err, state.BackoffTime)
-				state.RetryCount++
-
-				state.Ticker.Reset(state.BackoffTime)
-				nextBackoffTime := state.BackoffTime * 2
-				if nextBackoffTime > state.MaxBackoffTime {
-					nextBackoffTime = state.MaxBackoffTime
-				}
-				state.BackoffTime = nextBackoffTime
-				return err
+func TTLCheckMonitorFunc() MonitorFunc {
+	return func(cc *CommonClient, stopCh <-chan struct{}) {
+		var ttlTicker time.Duration
+		if cc.consulConf.TTL > 0 {
+			ttlTicker = time.Duration(cc.consulConf.TTL-1) * time.Second
+			if ttlTicker < time.Second {
+				ttlTicker = time.Second
 			}
-
-			logx.Infof("Service %s re-registered successfully", cc.serviceId)
-			state.RetryCount = 0
-			state.BackoffTime = 1 * time.Second
-			state.Ticker.Reset(state.OriginalTTL)
-			return nil
+		} else {
+			ttlTicker = 1 * time.Second
 		}
 
-		// 达到最大重试次数
-		if !registered {
-			logx.Errorf("Max retries reached for service %s. Resetting retry counter and backoff time.", cc.serviceId)
-			state.RetryCount = 0
-			state.BackoffTime = 1 * time.Second
-			state.Ticker.Reset(state.BackoffTime)
+		state := &MonitorState{
+			RetryCount:     0,
+			BackoffTime:    1 * time.Second,
+			MaxRetries:     5,
+			MaxBackoffTime: 30 * time.Second,
+			OriginalTTL:    ttlTicker,
+			Ticker:         time.NewTicker(ttlTicker),
+		}
+		defer state.Close()
+
+		for {
+			select {
+			case <-state.Ticker.C:
+				err := TTLMonitorLogic(cc, state)
+				if err != nil {
+					logx.Errorf("Monitor function error for service %s: %v", cc.serviceId, err)
+				}
+			case <-stopCh:
+				logx.Infof("Service monitor for %s stopped gracefully", cc.serviceId)
+				return
+			}
 		}
 
-		return nil
 	}
 }
 
-func TTLCheckMonitorFunc() MonitorFunc {
-	return createMonitorFunc(
-		func(cc *CommonClient) error {
-			return cc.apiClient.Agent().UpdateTTL(cc.serviceId, "", "passing")
-		},
-		"Service %s TTL updated successfully",
-	)
+func TTLMonitorLogic(cc *CommonClient, state *MonitorState) error {
+	// 执行健康检查动作
+	err := cc.apiClient.Agent().UpdateTTL(cc.serviceId, "", "passing")
+	if err == nil {
+		logx.Infof("Service %s TTL updated successfully", cc.serviceId)
+		state.RetryCount = 0
+		state.BackoffTime = 1 * time.Second
+		state.Ticker.Reset(state.OriginalTTL)
+		return nil
+	}
+
+	registered, err := cc.registerServiceHealthStatus(api.HealthPassing)
+	if err != nil {
+		logx.Error(err)
+	} else {
+		registered = true
+	}
+
+	state.Mutex.Lock()
+	defer state.Mutex.Unlock()
+	if !registered && state.RetryCount < state.MaxRetries {
+		logx.Infof("Attempting to re-register service %s (retry %d/%d)...", cc.serviceId, state.RetryCount+1, state.MaxRetries)
+		err = cc.registerServiceWithPassingHealth()
+		if err != nil {
+			logx.Errorf("Failed to re-register service %s: %v. Retrying in %v", cc.serviceId, err, state.BackoffTime)
+			state.RetryCount++
+
+			state.Ticker.Reset(state.BackoffTime)
+			nextBackoffTime := state.BackoffTime * 2
+			if nextBackoffTime > state.MaxBackoffTime {
+				nextBackoffTime = state.MaxBackoffTime
+			}
+			state.BackoffTime = nextBackoffTime
+			return err
+		}
+
+		logx.Infof("Service %s re-registered successfully", cc.serviceId)
+		state.RetryCount = 0
+		state.BackoffTime = 1 * time.Second
+		state.Ticker.Reset(state.OriginalTTL)
+		return nil
+	}
+
+	// 达到最大重试次数
+	if !registered {
+		logx.Errorf("Max retries reached for service %s. Resetting retry counter and backoff time.", cc.serviceId)
+		state.RetryCount = 0
+		state.BackoffTime = 1 * time.Second
+		state.Ticker.Reset(state.BackoffTime)
+	}
+	return nil
 }
 
 func HttpCheckMonitorFunc() MonitorFunc {
-	return createMonitorFunc(
-		func(cc *CommonClient) error {
-			ok, err := cc.registerServiceHealthStatus(api.HealthPassing)
-			if err != nil {
-				return err
+
+	return func(cc *CommonClient, stopCh <-chan struct{}) {
+		var ttlTicker time.Duration
+		if cc.consulConf.TTL > 0 {
+			ttlTicker = time.Duration(cc.consulConf.TTL-1) * time.Second
+			if ttlTicker < time.Second {
+				ttlTicker = time.Second
 			}
-			if !ok {
-				return fmt.Errorf("service %s health check failed", cc.serviceId)
+		} else {
+			ttlTicker = 1 * time.Second
+		}
+
+		state := &MonitorState{
+			RetryCount:     0,
+			BackoffTime:    1 * time.Second,
+			MaxRetries:     5,
+			MaxBackoffTime: 30 * time.Second,
+			OriginalTTL:    ttlTicker,
+			Ticker:         time.NewTicker(ttlTicker),
+		}
+		defer state.Close()
+
+		for {
+			select {
+			case <-state.Ticker.C:
+				err := HttpMonitorLogic(cc, state)
+				if err != nil {
+					logx.Errorf("Monitor function error for service %s: %v", cc.serviceId, err)
+				}
+			case <-stopCh:
+				logx.Infof("Service monitor for %s stopped gracefully", cc.serviceId)
+				return
 			}
-			return nil
-		},
-		"Service %s health check passed",
-	)
+		}
+	}
+}
+
+func HttpMonitorLogic(cc *CommonClient, state *MonitorState) error {
+	registered, err := cc.registerServiceHealthStatus(api.HealthPassing)
+	if err != nil {
+		logx.Error(err)
+	} else {
+		logx.Infof("Service %s health check passed", cc.serviceId)
+		registered = true
+	}
+
+	state.Mutex.Lock()
+	defer state.Mutex.Unlock()
+	if !registered && state.RetryCount < state.MaxRetries {
+		logx.Infof("Attempting to re-register service %s (retry %d/%d)...", cc.serviceId, state.RetryCount+1, state.MaxRetries)
+		err = cc.registerServiceWithPassingHealth()
+		if err != nil {
+			logx.Errorf("Failed to re-register service %s: %v. Retrying in %v", cc.serviceId, err, state.BackoffTime)
+			state.RetryCount++
+
+			state.Ticker.Reset(state.BackoffTime)
+			nextBackoffTime := state.BackoffTime * 2
+			if nextBackoffTime > state.MaxBackoffTime {
+				nextBackoffTime = state.MaxBackoffTime
+			}
+			state.BackoffTime = nextBackoffTime
+			return err
+		}
+
+		logx.Infof("Service %s re-registered successfully", cc.serviceId)
+		state.RetryCount = 0
+		state.BackoffTime = 1 * time.Second
+		state.Ticker.Reset(state.OriginalTTL)
+		return nil
+	}
+
+	// 达到最大重试次数
+	if !registered {
+		logx.Errorf("Max retries reached for service %s. Resetting retry counter and backoff time.", cc.serviceId)
+		state.RetryCount = 0
+		state.BackoffTime = 1 * time.Second
+		state.Ticker.Reset(state.BackoffTime)
+	}
+	return nil
 }
 
 func figureOutListenOn(listenOn string) string {
