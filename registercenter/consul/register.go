@@ -16,6 +16,7 @@ import (
 )
 
 type (
+	// Client is the interface for Consul service client.
 	Client interface {
 		RegisterService() error
 		DeregisterService() error
@@ -24,6 +25,7 @@ type (
 		GetServiceClient() *api.Client
 	}
 
+	// CommonClient is the common implementation of Client.
 	CommonClient struct {
 		registration   *api.AgentServiceRegistration
 		apiClient      *api.Client
@@ -37,6 +39,7 @@ type (
 		stopChMutex    sync.Mutex
 	}
 
+	// MonitorState holds the state for the health check monitor.
 	MonitorState struct {
 		RetryCount     int
 		BackoffTime    time.Duration
@@ -47,11 +50,15 @@ type (
 		Mutex          sync.RWMutex
 	}
 
+	// MonitorFunc is the function signature for health check monitor functions.
 	MonitorFunc func(cc *CommonClient, stopChan <-chan struct{})
 
+	// ServiceOption is the function signature for service options.
 	ServiceOption func(*CommonClient)
 )
 
+// MustNewService creates a new Consul service client.
+// It panics if the configuration is invalid.
 func MustNewService(listenOn string, c Conf, opts ...ServiceOption) Client {
 	service, err := NewService(listenOn, c, opts...)
 	if err != nil {
@@ -60,6 +67,11 @@ func MustNewService(listenOn string, c Conf, opts ...ServiceOption) Client {
 	return service
 }
 
+// NewService creates a new Consul service client.
+// It returns a Client instance or an error if the configuration is invalid.
+// The listenOn parameter specifies the local address to bind the service to.
+// The c parameter specifies the Consul configuration.
+// The opts parameter allows for additional monitor functions to be added. use WithMonitorFunc to add monitor functions.
 func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error) {
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -73,14 +85,8 @@ func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error) 
 	}
 	port, _ := strconv.ParseUint(ports, 10, 16)
 
-	client, err := api.NewClient(&api.Config{Scheme: c.Scheme, Address: c.Host, Token: c.Token})
-	if err != nil {
-		return nil, fmt.Errorf("create consul client error: %v", err)
-	}
-
 	service := &CommonClient{
 		registration: nil,
-		apiClient:    client,
 		serviceId:    fmt.Sprintf("%s-%s-%d", c.Key, host, port),
 		serviceHost:  host,
 		servicePort:  int(port),
@@ -92,6 +98,12 @@ func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error) 
 		option(service)
 	}
 
+	client, err := service.newApiClient()
+	if err != nil {
+		return nil, fmt.Errorf("create consul client error: %v", err)
+	}
+	service.apiClient = client
+
 	err = service.clientRegistration()
 	if err != nil {
 		return nil, err
@@ -100,6 +112,9 @@ func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error) 
 	return service, nil
 }
 
+// RegisterService registers the service with Consul.
+// It returns an error if the registration fails.
+// The service is registered with a passing health check.
 func (cc *CommonClient) RegisterService() error {
 	err := cc.registerServiceWithPassingHealth()
 	if err != nil {
@@ -123,22 +138,39 @@ func (cc *CommonClient) RegisterService() error {
 	return nil
 }
 
+// DeregisterService deregisters the service from Consul.
+// It returns an error if the deregistration fails.
 func (cc *CommonClient) DeregisterService() error {
 	cc.stopAllMonitors()
 	return cc.deleteRegisterService()
 }
 
+// GetServiceID returns the service ID.
 func (cc *CommonClient) GetServiceID() string {
 	return cc.serviceId
 }
 
+// GetServiceClient returns the Consul service client.
 func (cc *CommonClient) GetServiceClient() *api.Client {
 	return cc.apiClient
 }
+
+// GetRegistration returns the service registration.
 func (cc *CommonClient) GetRegistration() *api.AgentServiceRegistration {
 	return cc.registration
 }
 
+// newApiClient creates a new Consul service client.
+func (cc *CommonClient) newApiClient() (*api.Client, error) {
+	return api.NewClient(&api.Config{
+		Scheme:  cc.consulConf.Scheme,
+		Address: cc.consulConf.Host,
+		Token:   cc.consulConf.Token,
+	})
+}
+
+// registerServiceWithPassingHealth registers the service with a passing health check.
+// It returns an error if the registration fails.
 func (cc *CommonClient) registerServiceWithPassingHealth() error {
 
 	_ = cc.deleteRegisterService()
@@ -161,6 +193,8 @@ func (cc *CommonClient) registerServiceWithPassingHealth() error {
 	return nil
 }
 
+// registerService registers the service with Consul.
+// It returns an error if the registration fails.
 func (cc *CommonClient) registerService() error {
 	err := cc.apiClient.Agent().ServiceRegister(cc.registration)
 	if err != nil {
@@ -170,6 +204,8 @@ func (cc *CommonClient) registerService() error {
 	return nil
 }
 
+// clientRegistration creates the service registration.
+// switch check type to create different health check, such as TTL, gRPC, HTTP.
 func (cc *CommonClient) clientRegistration() error {
 	reg := &api.AgentServiceRegistration{
 		ID:      cc.serviceId,       // Service node name
@@ -226,11 +262,16 @@ func (cc *CommonClient) clientRegistration() error {
 	return nil
 }
 
+// deleteRegisterService deregisters the service from Consul.
+// It returns an error if the deregistration fails.
 func (cc *CommonClient) deleteRegisterService() error {
 	err := cc.apiClient.Agent().ServiceDeregister(cc.serviceId)
 	return err
 }
 
+// setRegisterServiceHealthStatus sets the health status of the service.
+// status is the health status to set, such as api.HealthPassing or api.HealthCritical.
+// switch check type to set different health check status. such as TTL, gRPC, HTTP.
 func (cc *CommonClient) setRegisterServiceHealthStatus(status string) error {
 	switch cc.consulConf.CheckType {
 	case CheckTypeTTL:
@@ -283,6 +324,7 @@ func (cc *CommonClient) setRegisterServiceHealthStatus(status string) error {
 	}
 }
 
+// getRegisterServiceHealthStatus returns the health status of the service.
 func (cc *CommonClient) getRegisterServiceHealthStatus() (string, error) {
 	service, _, err := cc.apiClient.Agent().Service(cc.serviceId, nil)
 	if err != nil {
@@ -302,6 +344,9 @@ func (cc *CommonClient) getRegisterServiceHealthStatus() (string, error) {
 	return "", fmt.Errorf("service %s not found in health check results", cc.serviceId)
 }
 
+// registerServiceHealthStatus checks if the service health status is as expected.
+// status is the expected health status, such as api.HealthPassing or api.HealthCritical.
+// It returns true if the status matches, otherwise false.
 func (cc *CommonClient) registerServiceHealthStatus(status string) (bool, error) {
 	ss, err := cc.getRegisterServiceHealthStatus()
 	if err != nil {
@@ -315,6 +360,12 @@ func (cc *CommonClient) registerServiceHealthStatus(status string) (bool, error)
 	return true, nil
 }
 
+// registerServiceMonitors registers the service monitors based on the check type.
+// switch check type to register different monitors. such as TTL, gRPC, HTTP.
+// default monitor is TTLCheckMonitorFunc where type is TTL
+// default monitor is HttpCheckMonitorFunc where type is HTTP
+// default monitor is GrpcCheckMonitorFunc where type is gRPC
+// you can use MustNewService opts param to add custom monitors.
 func (cc *CommonClient) registerServiceMonitors() error {
 	cc.monitorMutex.RLock()
 	hasNoFuncs := len(cc.monitorFuncs) == 0
@@ -346,6 +397,7 @@ func (cc *CommonClient) registerServiceMonitors() error {
 	return nil
 }
 
+// startMonitors starts the service monitors.
 func (cc *CommonClient) startMonitors(funcs []MonitorFunc) {
 	cc.stopChMutex.Lock()
 	defer cc.stopChMutex.Unlock()
@@ -357,6 +409,7 @@ func (cc *CommonClient) startMonitors(funcs []MonitorFunc) {
 	}
 }
 
+// stopAllMonitors stops all service monitors.
 func (cc *CommonClient) stopAllMonitors() {
 	cc.stopChMutex.Lock()
 	defer cc.stopChMutex.Unlock()
@@ -376,6 +429,7 @@ func (s *MonitorState) Close() {
 	}
 }
 
+// TTLCheckMonitorFunc is the monitor function for TTL check.
 func TTLCheckMonitorFunc() MonitorFunc {
 	return func(cc *CommonClient, stopCh <-chan struct{}) {
 		var ttlTicker time.Duration
@@ -414,8 +468,10 @@ func TTLCheckMonitorFunc() MonitorFunc {
 	}
 }
 
+// TTLMonitorLogic is the logic for TTL monitor.
 func TTLMonitorLogic(cc *CommonClient, state *MonitorState) error {
-	// 执行健康检查动作
+
+	// update TTL
 	err := cc.apiClient.Agent().UpdateTTL(cc.serviceId, "", "passing")
 	if err == nil {
 		logx.Infof("Service %s TTL updated successfully", cc.serviceId)
@@ -457,7 +513,7 @@ func TTLMonitorLogic(cc *CommonClient, state *MonitorState) error {
 		return nil
 	}
 
-	// 达到最大重试次数
+	// reset retry counter and backoff time if not registered
 	if !registered {
 		logx.Errorf("Max retries reached for service %s. Resetting retry counter and backoff time.", cc.serviceId)
 		state.RetryCount = 0
@@ -467,6 +523,7 @@ func TTLMonitorLogic(cc *CommonClient, state *MonitorState) error {
 	return nil
 }
 
+// HttpCheckMonitorFunc is the monitor function for HTTP check.
 func HttpCheckMonitorFunc() MonitorFunc {
 
 	return func(cc *CommonClient, stopCh <-chan struct{}) {
@@ -505,6 +562,7 @@ func HttpCheckMonitorFunc() MonitorFunc {
 	}
 }
 
+// HttpMonitorLogic is the logic for HTTP monitor.
 func HttpMonitorLogic(cc *CommonClient, state *MonitorState) error {
 	registered, err := cc.registerServiceHealthStatus(api.HealthPassing)
 	if err != nil {
@@ -549,6 +607,9 @@ func HttpMonitorLogic(cc *CommonClient, state *MonitorState) error {
 	return nil
 }
 
+// figureOutListenOn figures out the listen on address.
+// if your host is "0.0.0.0", it will be replaced with the environment variable POD_IP or the internal IP.
+// example: "0.0.0.0:8080" -> "10.10.10.10:8080"
 func figureOutListenOn(listenOn string) string {
 	fields := strings.Split(listenOn, ":")
 	if len(fields) == 0 {
@@ -571,6 +632,8 @@ func figureOutListenOn(listenOn string) string {
 	return strings.Join(append([]string{ip}, fields[1:]...), ":")
 }
 
+// WithMonitorFuncs sets the monitor functions for the service.
+// example: MustNewService(listenOn, WithMonitorFuncs(TTLCheckMonitorFunc(), HttpCheckMonitorFunc()))
 func WithMonitorFuncs(funcs ...MonitorFunc) ServiceOption {
 	return func(cc *CommonClient) {
 		cc.monitorMutex.Lock()

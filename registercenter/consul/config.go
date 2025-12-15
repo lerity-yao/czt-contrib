@@ -16,6 +16,7 @@ const (
 	healthPath    = "/healthz"
 )
 
+// CheckHttpConf is the http check config.
 type CheckHttpConf struct {
 	Method string `json:",default=GET,options=GET|POST"`
 	Path   string `json:",default=/healthz"`
@@ -24,13 +25,26 @@ type CheckHttpConf struct {
 	Scheme string `json:",default=http,options=http|https"`
 }
 
+// CheckGrpcConf is the grpc check config.
 type CheckGrpcConf struct {
 	TLSServerName string `json:",optional"`
 	TLSSkipVerify bool   `json:",default=true"`
 	GRPCUseTLS    bool   `json:",default=false"`
 }
 
-// Conf is the config item with the given key on etcd.
+// Conf is the config item with the given key on consul
+// Host is the consul hosts. example: "localhost:8500"
+// Key is the consul key. example: "service/name"
+// Scheme is the consul scheme. example: "http"
+// Tag is the consul tags. example: "tag1,tag2"
+// Meta is the consul meta. example: {"key": "value"}
+// TTL is the live check interval. example: 20
+// ExpiredTTL is the deregistration time multiplier. example: 3
+// CheckTimeout is the health check timeout. example: 3
+// CheckType is the check type. example: "ttl", "http", "grpc"
+// CheckHttp is the http check config.
+// CheckGrpc is the grpc check config.
+// CheckTypeTTL is the ttl check config.
 type Conf struct {
 	Host         string            // consul hosts
 	Key          string            // consul key
@@ -46,6 +60,7 @@ type Conf struct {
 	CheckGrpc    CheckGrpcConf
 }
 
+// Validate validates c.
 // Validate validates c.
 func (c *Conf) Validate() error {
 	if len(c.Host) == 0 {
