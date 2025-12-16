@@ -386,6 +386,7 @@ func (cc *CommonClient) registerServiceMonitors() error {
 			}
 
 		}
+		cc.monitorFuncs = append(cc.monitorFuncs, CheckApiMonitorFunc())
 		cc.monitorMutex.Unlock()
 	}
 
@@ -603,6 +604,119 @@ func HttpMonitorLogic(cc *CommonClient, state *MonitorState) error {
 		state.RetryCount = 0
 		state.BackoffTime = 1 * time.Second
 		state.Ticker.Reset(state.BackoffTime)
+	}
+	return nil
+}
+
+// CheckApiMonitorFunc is the monitor function for api check.
+func CheckApiMonitorFunc() MonitorFunc {
+	return func(cc *CommonClient, stopCh <-chan struct{}) {
+		var ttlTicker time.Duration
+		if cc.consulConf.TTL > 0 {
+			ttlTicker = time.Duration(cc.consulConf.TTL-1) * time.Second
+			if ttlTicker < time.Second {
+				ttlTicker = time.Second
+			}
+		} else {
+			ttlTicker = 1 * time.Second
+		}
+
+		state := &MonitorState{
+			RetryCount:     0,
+			BackoffTime:    1 * time.Second,
+			MaxRetries:     5,
+			MaxBackoffTime: 30 * time.Second,
+			OriginalTTL:    ttlTicker,
+			Ticker:         time.NewTicker(ttlTicker),
+		}
+		defer state.Close()
+
+		for {
+			select {
+			case <-state.Ticker.C:
+				err := ApiMonitorLogic(cc)
+				if err != nil {
+					logx.Errorf("Monitor function error for service %s: %v", cc.serviceId, err)
+				}
+			case <-stopCh:
+				logx.Infof("Service monitor for %s stopped gracefully", cc.serviceId)
+				return
+			}
+		}
+
+	}
+}
+
+func ApiMonitorLogic(cc *CommonClient) error {
+	hasService := false
+	// 检查apiClient是否为空
+	if cc.apiClient == nil {
+		client, err := cc.newApiClient()
+		if err != nil {
+			logx.Infof("failed to update consul client: %v", err)
+			return fmt.Errorf("failed to update consul client")
+		}
+		cc.apiClient = client
+	}
+
+	// 检查apiClient状态
+	leader, err := cc.apiClient.Status().Leader()
+	if err != nil || leader == "" {
+		logx.Infof("consul client leader is empty, try to update it")
+		client, err := cc.newApiClient()
+		if err != nil {
+			logx.Infof("failed to update consul client: %v", err)
+			return fmt.Errorf("failed to update consul client")
+		}
+		cc.apiClient = client
+	}
+
+	// 获取client 当前节点下的所有注册服务
+	services, err := cc.apiClient.Agent().Services()
+	if err != nil {
+		logx.Errorf("failed to get services: %v", err)
+		return fmt.Errorf("failed to get services: %v", err)
+	}
+	// 检查当前节点是否注册了该服务
+	for _, service := range services {
+		if service.ID == cc.serviceId {
+			hasService = true
+			break
+		}
+	}
+
+	if hasService {
+		return nil
+	}
+	// 当前节点未注册该服务
+	instances, _, err := cc.apiClient.Catalog().Service(
+		//cc.registration.Name,
+		cc.consulConf.Key,
+		"",
+		nil,
+	)
+	if err != nil {
+		logx.Errorf("failed to get service %s: %v", cc.consulConf.Key, err)
+		return fmt.Errorf("failed to get service %s: %v", cc.consulConf.Key, err)
+	}
+	// 清理其他节点的注册
+	for _, instance := range instances {
+		if instance.ServiceID == cc.serviceId {
+			_, err = cc.apiClient.Catalog().Deregister(&api.CatalogDeregistration{
+				ServiceID: cc.serviceId,
+				Node:      instance.Node,
+			}, nil)
+			if err != nil {
+				logx.Errorf("failed to deregister service %s: %v", cc.serviceId, err)
+				return err
+			}
+		}
+	}
+
+	// 在当前节点注册服务
+	err = cc.registerServiceWithPassingHealth()
+	if err != nil {
+		return err
 	}
 	return nil
 }
