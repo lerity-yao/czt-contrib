@@ -257,20 +257,9 @@ func main() {
         WorkerID:     1,
     }
     
-    GlobalSnake = snake.MustNewSnake(conf)
+    GlobalSnake := snake.MustNewSnake(conf)
     
     // 启动应用...
-}
-```
-
-
-### 3. 优雅关闭
-
-```go
-// 如果需要清理资源，可以在程序退出时执行相应操作
-func cleanup() {
-    // Snake目前不需要显式清理，但可以记录统计信息
-    fmt.Println("Snake service stopped gracefully")
 }
 ```
 
