@@ -18,7 +18,8 @@ type (
 	Server interface {
 		Start()
 		Stop()
-		Add(pattern string, handler HandlerFunc, cronSpec string, opts ...asynq.Option)
+		Add(pattern string, handler HandlerFunc)
+		CronAdd(spec string, pattern string, opts ...asynq.Option) string
 	}
 
 	CommonServer struct {
@@ -103,7 +104,7 @@ func (c *CommonServer) ServerMux() *asynq.ServeMux {
 }
 
 // Add 添加任务处理函数
-func (c *CommonServer) Add(pattern string, handler HandlerFunc, cronSpec string, opts ...asynq.Option) {
+func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
 	realPattern := pattern
 	if c.conf.Namespace != "" {
 		realPattern = fmt.Sprintf("%s:%s", c.conf.Namespace, pattern)
@@ -122,29 +123,26 @@ func (c *CommonServer) Add(pattern string, handler HandlerFunc, cronSpec string,
 
 	// 注册到原生的 Mux
 	c.Mux.HandleFunc(realPattern, asynqHandler)
-	// 2. 如果提供了 Cron 表达式，则自动注册定时任务
-	if cronSpec != "" {
-		finalOpts := append(opts, asynq.Queue(c.conf.Namespace))
-		_, err := c.CronAdd(cronSpec, realPattern, finalOpts...)
-		if err != nil {
-			logx.Errorf("[ASYNQ] 自动注册定时任务失败: type=%s, spec=%s, err=%v", realPattern, cronSpec, err)
-		}
-		logx.Infof("[ASYNQ] 注册定时任务: %s", realPattern)
-	} else {
-		logx.Infof("[ASYNQ] 注册外部任务(待命): %s", realPattern)
-	}
+	logx.Infof("[ASYNQ] 注册外部任务(待命): %s", realPattern)
+
 }
 
 // CronAdd 注册定时任务 (Server 自产自销)
-func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option) (string, error) {
-	task := asynq.NewTask(pattern, nil, opts...)
-	entryID, err := c.Scheduler.Register(spec, task, opts...)
+func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option) string {
+	realPattern := pattern
+	finalOpts := opts
+	if c.conf.Namespace != "" {
+		realPattern = fmt.Sprintf("%s:%s", c.conf.Namespace, pattern)
+		finalOpts = append(opts, asynq.Queue(c.conf.Namespace))
+	}
+	task := asynq.NewTask(realPattern, nil, finalOpts...)
+	entryID, err := c.Scheduler.Register(spec, task, finalOpts...)
 	if err != nil {
-		return "", fmt.Errorf("asynq scheduler register failed: %w", err)
+		logx.Errorf("[ASYNQ] 自动注册定时任务失败: type=%s, spec=%s, err=%v", realPattern, spec, err)
 	}
 
-	logx.Infof("[ASYNQ] Cron job registered: [%s] -> %s (EntryID: %s)", spec, pattern, entryID)
-	return entryID, nil
+	logx.Infof("[ASYNQ] Cron job registered: [%s] -> %s (EntryID: %s)", spec, realPattern, entryID)
+	return entryID
 }
 
 // Start 启动任务处理服务
