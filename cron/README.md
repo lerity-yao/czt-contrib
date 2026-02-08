@@ -17,6 +17,14 @@
 ```bash
 go get github.com/lerity-yao/czt-contrib/cron
 ```
+## 服务生成
+
+支持类似 goctl 工具一键生成服务端代码， 工具为 cztctl, 是goctl魔改的
+
+也可以自定义服务端代码生成模板
+
+请参考 https://github.com/lerity-yao/go-zero/tree/cztctl
+
 ## ⚙️ 配置参数
 
 ### RedisConf (基础连接配置)
@@ -307,10 +315,6 @@ Starting server at 0.0.0.0:8886...
 ```
 
 执行 `curl http://127.0.0.1:6060/metrics` 可以看到 Prometheus 指标
-
-#### go-zero 模板生成
-
--- todo
 
 #### 在独立脚本或非 go-zero 项目中使用
 

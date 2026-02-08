@@ -18,6 +18,14 @@
 go get github.com/lerity-yao/czt-contrib/mq/rabbitmq
 ```
 
+## 📦 服务生成
+
+支持类似 goctl 工具一键生成服务端代码， 工具为 cztctl, 是goctl魔改的
+
+也可以自定义服务端代码生成模板
+
+请参考 https://github.com/lerity-yao/go-zero/tree/cztctl
+
 ## 🚀 快速开始
 
 ### 1. 生产者（客户端）使用
