@@ -108,7 +108,7 @@ Server 封装了任务的获取、解码、中间件执行及定时触发逻辑�
 | Add      | pattern: 任务类型 <br>handler: 处理函数<br>cronSpec: Cron 表达式<br>opts: Asynq 原生配置 | 三位一体注册：<br>1. 自动拼接 Namespace:Pattern。<br>2. 逻辑隔离：防止不同服务误消费。<br>3. 自产自销：若有 cronSpec 则自动注册为定时任务，否则作为普通 Worker。<br> 普通的work需要有client投递任务 |
 | Start    | 无                                                                         | 异步启动：启动 Scheduler 和 Processor 后立即返回。适用于 go-zero 的 ServiceGroup 管理，不会阻塞主线程。                                                            |
 | Stop     | 无                                                                         | 优雅停机：按照 Scheduler -> Server -> Inspector 顺序关闭。先停产，再清空存量任务，最后释放 Redis 连接。                                                              |
-
+| CronAdd | spec: Cron 表达式<br>pattern: 任务类型<br>opts: Asynq 原生配置 | 注册定时任务：根据 Cron 表达式自动触发任务。支持秒级精度。 |
 ### Client 接口：强类型生产者与任务控制器
 Client 提供了多种任务进入 Redis 的姿势。
 
@@ -233,7 +233,7 @@ func NewServiceContext(c config.Config) *ServiceContext {
 ```go
 // internal/handler/worker.go
 func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
-    serverCtx.Cron.Add("demoA", demoA.DemoAHandle(serverCtx), "*/1 * * * *")
+    serverCtx.Cron.Add("demoA", demoA.DemoAHandle(serverCtx))
     server.Add(serverCtx.Cron)
 }
 ```
