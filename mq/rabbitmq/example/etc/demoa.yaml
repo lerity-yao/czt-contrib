@@ -1,0 +1,18 @@
+Name: demoA
+Host: 127.0.0.1
+Port: 8080
+GDemoARabbitmqConf: 
+  Username:
+  Password:
+  Host:
+  Port:
+  ListenerQueues:
+    - Name: queue.demoa
+
+GDemoBRabbitmqConf: 
+  Username:
+  Password:
+  Host:
+  Port:
+  ListenerQueues:
+    - Name: queue.demob

@@ -1,0 +1,26 @@
+syntax = "v1"
+
+type (
+	// 用户结构体
+	User {
+		Name string `json:"name"` // 用户名称
+	}
+	Name {
+		Code int `json:"code"`
+	}
+	Job {
+		Id int `json:"id"`
+	}
+)
+
+@server (
+	group: demoA
+)
+service demoA {
+	@handler GDemoA
+	post /queue.demoa
+
+	@handler GDemoB
+	post /queue.demob
+}
+
