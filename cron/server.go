@@ -123,7 +123,7 @@ func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
 
 	// 注册到原生的 Mux
 	c.Mux.HandleFunc(realPattern, asynqHandler)
-	logx.Infof("[ASYNQ] 注册外部任务(待命): %s", realPattern)
+	logx.Infof("[ASYNQ] Task registered, waiting for dispatch: %s", realPattern)
 
 }
 
@@ -138,7 +138,7 @@ func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option
 	task := asynq.NewTask(realPattern, nil, finalOpts...)
 	entryID, err := c.Scheduler.Register(spec, task, finalOpts...)
 	if err != nil {
-		logx.Errorf("[ASYNQ] 自动注册定时任务失败: type=%s, spec=%s, err=%v", realPattern, spec, err)
+		logx.Errorf("[ASYNQ] Cron job registration failed: type=%s, spec=%s, err=%v", realPattern, spec, err)
 	}
 
 	logx.Infof("[ASYNQ] Cron job registered: [%s] -> %s (EntryID: %s)", spec, realPattern, entryID)
