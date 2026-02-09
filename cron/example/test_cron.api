@@ -1,0 +1,30 @@
+syntax = "v1"
+
+type (
+	// 用户结构体
+	User {
+		Name string `json:"name"` // 用户名称
+	}
+	Name {
+		Code int `json:"code"`
+	}
+	Job {
+		Id int `json:"id"`
+	}
+)
+
+@server (
+	// 分组 demoA
+	group: demoA
+)
+service demoA {
+	// 外部任务
+	@handler GDemoA
+	post /test (Name)
+
+	// 内部任务
+	@doc "cron: */1 * * * *"
+	@handler GDemoB
+	post /cron.GDemoB
+}
+
