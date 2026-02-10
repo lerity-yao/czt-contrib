@@ -246,3 +246,114 @@ func TestConsulRegisterHTTP(t *testing.T) {
 
 	fmt.Println("✅ Test completed successfully")
 }
+
+func TestConsulReconnect(t *testing.T) {
+	// 使用127.0.0.1确保本地可访问
+	serverAddr := "127.0.0.1:8888"
+
+	// 创建一个简单的HTTP处理器
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			fmt.Printf("Received health check request from %s\n", r.RemoteAddr)
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"status":"healthy"}`))
+		} else {
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+
+	// 创建一个可关闭的HTTP服务器
+	server := &http.Server{
+		Addr:    serverAddr,
+		Handler: handler,
+	}
+
+	// 启动HTTP服务器
+	go func() {
+		fmt.Printf("Starting HTTP server on %s...\n", serverAddr)
+		err := server.ListenAndServe()
+		if err != nil && err != http.ErrServerClosed {
+			fmt.Printf("HTTP server error: %v\n", err)
+		}
+	}()
+
+	// 等待一小段时间确保服务器启动
+	time.Sleep(500 * time.Millisecond)
+
+	// 快速验证服务器是否启动成功
+	conn, err := net.DialTimeout("tcp", serverAddr, 1*time.Second)
+	if err != nil {
+		t.Fatalf("Failed to start HTTP server: %v", err)
+	}
+	conn.Close()
+	fmt.Printf("✅ HTTP server at %s is ready\n", serverAddr)
+
+	// 确保测试结束时关闭服务器
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			fmt.Printf("Error shutting down HTTP server: %v\n", err)
+		} else {
+			fmt.Println("HTTP server shutdown completed")
+		}
+	}()
+
+	// 设置HTTP健康检查配置
+	serviceKey := "test-service-reconnect"
+	conf := Conf{
+		Host:      "127.0.0.1:8500",
+		Key:       serviceKey,
+		CheckType: "http",
+		Token:     "af9a9026-970a-5e7f-9b09-9cdedfd8a320",
+		//TTL:          5,
+		//ExpiredTTL:   3,
+		CheckTimeout: 2,
+		CheckHttp: CheckHttpConf{
+			Host: "127.0.0.1",
+			Port: 8888,
+		},
+	}
+
+	service := MustNewService(serverAddr, conf)
+	err = service.RegisterService()
+	serviceID := service.GetServiceID()
+	require.Nil(t, err)
+
+	// 等待服务注册完成
+	time.Sleep(20 * time.Second)
+
+	// 创建Consul客户端进行验证
+	client, err := api.NewClient(&api.Config{Scheme: "http", Address: "127.0.0.1:8500"})
+	assert.Nil(t, err, "Failed to create Consul client: %v", err)
+
+	// 删除服务
+	defer func() {
+		if serviceID != "" {
+			err := client.Agent().ServiceDeregister(serviceID)
+			if err != nil {
+				fmt.Printf("Failed to cleanup service: %v\n", err)
+			} else {
+				fmt.Printf("🧹 Test completed, service %s cleaned up\n", serviceID)
+			}
+		}
+	}()
+
+	// 保证服务运行
+	for true {
+		time.Sleep(1 * time.Second)
+	}
+
+	// 清理：测试完成后注销服务
+	defer func() {
+		if serviceID != "" {
+			err := client.Agent().ServiceDeregister(serviceID)
+			if err != nil {
+				fmt.Printf("Failed to cleanup service: %v\n", err)
+			} else {
+				fmt.Printf("🧹 Test completed, service %s cleaned up\n", serviceID)
+			}
+		}
+	}()
+	fmt.Println("✅ Test completed successfully")
+}
