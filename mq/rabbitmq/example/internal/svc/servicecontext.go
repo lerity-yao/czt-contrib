@@ -1,7 +1,7 @@
 package svc
 
 import (
-	"example/example/internal/config"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/config"
 )
 
 type ServiceContext struct {

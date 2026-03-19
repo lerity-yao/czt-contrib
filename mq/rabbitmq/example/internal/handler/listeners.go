@@ -4,14 +4,12 @@
 package handler
 
 import (
-	"context"
-	"example/example/internal/handler/demoA"
-	"example/example/internal/svc"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/handler/demoA"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/svc"
 	"github.com/zeromicro/go-zero/core/service"
 )
 
 func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
-	ctx := context.Background()
-	server.Add(demoA.GDemoAHandler(ctx, serverCtx))
-	server.Add(demoA.GDemoBHandler(ctx, serverCtx))
+	server.Add(demoA.GDemoAHandler(serverCtx))
+	server.Add(demoA.GDemoBHandler(serverCtx))
 }

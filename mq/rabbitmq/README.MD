@@ -6,11 +6,103 @@
 
 - 🚀 **高性能**: 基于 AMQP 协议的高性能消息队列
 - 🔗 **链路追踪**: 集成 OpenTelemetry 分布式链路追踪
-- 📊 **监控指标**: 内置 Prometheus 指标收集
+- 📊 **监控指标**: 内置 Prometheus 指标收集（Sender 5个 + Listener 9个）
 - 🛡️ **错误恢复**: 自动重连和错误处理机制
 - 🔄 **消息确认**: 支持可靠的消息确认机制
 - ⚡ **并发控制**: 灵活的 QoS 配置和并发控制
 - 🔧 **配置灵活**: 支持多种消息模式和队列配置
+- 🔌 **连接可靠**: 支持自动重连、NotifyClose 监听、优雅停机
+
+---
+
+## 📢 v0.1.0 版本更新说明
+
+### 新增功能
+
+#### 1. 连接可靠性增强
+- **NotifyClose 监听**: Sender 和 Listener 同时监听 Connection 和 Channel 的关闭事件
+- **自动重连**: 连接断开后自动尝试重连（最多 10 次）
+- **线程安全**: 使用 `atomic.Bool` 保证 `closed` 标志线程安全
+- **双重检查**: 避免重复重连（加锁前检查 + 加锁后检查）
+- **优雅停机**: 收到 go-zero proc 停止信号后不再重连
+
+#### 2. Sender 优雅停机
+- 自动注册 `proc.AddShutdownListener` 关闭钩子
+- 停机时标记 `closed`，不再重连
+
+#### 3. 监控指标大幅扩展
+
+**Sender 指标（5个）**：
+
+| 指标名 | 类型 | Labels | 说明 |
+|--------|------|--------|------|
+| `mq_sender_send_total` | Counter | exchange, route_key, status | 发送总数 |
+| `mq_sender_send_duration_ms` | Histogram | exchange, route_key | 发送耗时 |
+| `mq_sender_send_size_bytes` | Histogram | exchange, route_key | 消息大小 |
+| `mq_sender_reconnect_total` | Counter | - | 重连次数 |
+| `mq_sender_disconnect_total` | Counter | - | 掉线次数 |
+
+**Listener 指标（9个）**：
+
+| 指标名 | 类型 | Labels | 说明 |
+|--------|------|--------|------|
+| `mq_listener_consume_total` | Counter | queue, status | 消费总数 |
+| `mq_listener_consume_duration_ms` | Histogram | queue | 消费耗时 |
+| `mq_listener_consume_size_bytes` | Histogram | queue | 消息大小 |
+| `mq_listener_in_flight` | Gauge | queue | 当前处理中消息数 |
+| `mq_listener_parse_error_total` | Counter | queue | 解析失败数 |
+| `mq_listener_panic_total` | Counter | queue | Panic 次数 |
+| `mq_listener_ack_total` | Counter | queue, type | ACK/Reject 计数 |
+| `mq_listener_reconnect_total` | Counter | - | 重连次数 |
+| `mq_listener_disconnect_total` | Counter | - | 掉线次数 |
+
+#### 4. 拦截器优化
+- 调整顺序为：`recovery → prometheus → logging → trace`
+- 确保所有拦截器都能执行（即使 trace 解析失败）
+
+#### 5. 其他优化
+- `StartConsumerSpan` 增加 carrier nil 防护
+- 消息解析移至 traceInterceptor，避免重复解析
+- ACK/Reject 逻辑统一放到 processMessage 外层
+
+### 删除的功能
+- 删除 `client.go` 文件
+- 删除 `parseMessage` 方法（消息解析移至 traceInterceptor）
+- 删除 `requeueMessage` 重复消费逻辑
+
+### ❗ 版本升级注意事项
+
+#### 1. 指标名称变更
+```diff
+- mq_consume_total
++ mq_listener_consume_total
+
+- mq_consume_duration_ms
++ mq_listener_consume_duration_ms
+```
+**影响**: 需要更新 Prometheus 查询和 Grafana 仪表盘
+
+#### 2. client.go 已删除
+```diff
+- client, err := rabbitmq.NewClient(ctx, conf)
++ sender, err := rabbitmq.NewSender(conf)
+// 或
++ sender := rabbitmq.MustNewSender(ctx, conf)
+```
+
+#### 3. Sender 自动注册 shutdown hook
+- `NewSender` 和 `MustNewSender` 会自动注册 `proc.AddShutdownListener`
+- 在 go-zero 环境下不需要手动调用 `Close()`
+- 非 go-zero 环境仍需手动调用 `Close()`
+
+#### 4. MustNewListener 去掉 ctx 参数
+```diff
+- rabbitmq.MustNewListener(ctx, conf, handler)
++ rabbitmq.MustNewListener(conf, handler)
+```
+**说明**: 消费者内部直接使用 `context.Background()` 派生，外部传入的 ctx 无实际作用
+
+---
 
 ## 📦 安装
 
@@ -30,6 +122,61 @@ go get github.com/lerity-yao/czt-contrib/mq/rabbitmq
 
 ### 1. 生产者（客户端）使用
 
+#### go-zero 框架中使用（推荐）
+
+在 `svc/servicecontext.go` 中初始化 Sender，自动通过 `proc.AddShutdownListener` 优雅停机：
+
+```go
+// internal/config/config.go
+package config
+
+import (
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
+	"github.com/zeromicro/go-zero/rest"
+)
+
+type Config struct {
+	rest.RestConf
+	RabbitMqSenderConf rabbitmq.RabbitSenderConf
+}
+```
+
+```go
+// internal/svc/servicecontext.go
+package svc
+
+import (
+	"context"
+	"your-project/internal/config"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
+)
+
+type ServiceContext struct {
+	Config config.Config
+	Sender rabbitmq.Sender
+}
+
+func NewServiceContext(c config.Config) *ServiceContext {
+	ctx := context.Background()
+	return &ServiceContext{
+		Config: c,
+		Sender: rabbitmq.MustNewSender(ctx, c.RabbitMqSenderConf),
+	}
+}
+```
+
+```go
+// internal/logic/xxxlogic.go
+func (l *XxxLogic) Xxx() error {
+	payload, _ := json.Marshal(message)
+	return l.svcCtx.Sender.Send(l.ctx, "exchange", "routeKey", payload)
+}
+```
+
+#### 非 go-zero 框架使用
+
+需要手动调用 `Close()` 关闭连接：
+
 ```go
 package main
 
@@ -37,13 +184,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
 )
 
 func main() {
-	// 配置生产者
 	conf := rabbitmq.RabbitSenderConf{
 		RabbitConf: rabbitmq.RabbitConf{
 			Username: "guest",
@@ -55,25 +200,16 @@ func main() {
 		ContentType: "application/json",
 	}
 
-	// 创建生产者客户端
-	ctx := context.Background()
-	client, err := rabbitmq.MustNewSenderClient(ctx, conf)
+	sender, err := rabbitmq.NewSender(conf)
 	if err != nil {
 		panic(err)
 	}
+	defer sender.Close() // 非 go-zero 环境需手动关闭
 
-	// 发送消息
-	message := map[string]interface{}{
-		"order_id": "12345",
-		"amount":   99.99,
-		"user_id":  "user001",
-	}
-
-	payload, _ := json.Marshal(message)
+	ctx := context.Background()
+	payload, _ := json.Marshal(map[string]interface{}{"order_id": "12345"})
 	
-	// 发送到指定交换机和路由键
-	err = client.Send(ctx, "order.exchange", "order.created", payload)
-	if err != nil {
+	if err := sender.Send(ctx, "order.exchange", "order.created", payload); err != nil {
 		panic(err)
 	}
 
@@ -83,180 +219,236 @@ func main() {
 
 ### 2. 消费者（服务端）使用
 
+消费者仅支持在 go-zero 框架中使用，推荐使用 `cztctl` 工具生成代码。
+
+**目录结构**：
+```
+├── etc/
+│   └── demoa.yaml
+├── internal/
+│   ├── config/
+│   │   └── config.go
+│   ├── handler/
+│   │   ├── demoA/
+│   │   │   └── gdemoahandler.go
+│   │   └── listeners.go
+│   ├── logic/demoA/
+│   │   └── gdemoalogic.go
+│   └── svc/
+│       └── servicecontext.go
+└── demoa.go
+```
+
+**配置文件** `etc/demoa.yaml`：
+```yaml
+Name: demoA
+Host: 127.0.0.1
+Port: 8080
+GDemoARabbitmqConf: 
+  Username: guest
+  Password: guest
+  Host: localhost
+  Port: 5672
+  ListenerQueues:
+    - Name: queue.demoa
+```
+
+**配置结构** `internal/config/config.go`：
+```go
+package config
+
+import (
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
+	"github.com/zeromicro/go-zero/rest"
+)
+
+type Config struct {
+	rest.RestConf
+	GDemoARabbitmqConf rabbitmq.RabbitListenerConf
+}
+```
+
+**Handler 注册** `internal/handler/listeners.go`：
+```go
+package handler
+
+import (
+	"your-project/internal/handler/demoA"
+	"your-project/internal/svc"
+	"github.com/zeromicro/go-zero/core/service"
+)
+
+func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
+	server.Add(demoA.GDemoAHandler(serverCtx))
+}
+```
+
+**Handler 实现** `internal/handler/demoA/gdemoahandler.go`：
+```go
+package demoA
+
+import (
+	"context"
+	"your-project/internal/logic/demoA"
+	"your-project/internal/svc"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
+	"github.com/zeromicro/go-zero/core/service"
+)
+
+func GDemoAHandler(svcCtx *svc.ServiceContext) service.Service {
+	handler := func(ctx context.Context, message []byte) error {
+		l := demoA.NewGDemoALogic(ctx, svcCtx)
+		return l.GDemoA(message)
+	}
+	return rabbitmq.MustNewListener(svcCtx.Config.GDemoARabbitmqConf, rabbitmq.HandlerFunc(handler))
+}
+```
+
+**业务逻辑** `internal/logic/demoA/gdemoalogic.go`：
+```go
+package demoA
+
+import (
+	"context"
+	"your-project/internal/svc"
+	"github.com/zeromicro/go-zero/core/logx"
+)
+
+type GDemoALogic struct {
+	logx.Logger
+	ctx    context.Context
+	svcCtx *svc.ServiceContext
+}
+
+func NewGDemoALogic(ctx context.Context, svcCtx *svc.ServiceContext) *GDemoALogic {
+	return &GDemoALogic{
+		Logger: logx.WithContext(ctx),
+		ctx:    ctx,
+		svcCtx: svcCtx,
+	}
+}
+
+func (l *GDemoALogic) GDemoA(message []byte) error {
+	// todo: add your logic here
+	l.Infof("收到消息: %s", string(message))
+	return nil
+}
+```
+
+**主函数** `demoa.go`：
 ```go
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"flag"
+	"fmt"
 
-	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
-	"github.com/zeromicro/go-zero/core/logc"
-	"github.com/zeromicro/go-zero/core/logx"
+	"your-project/internal/config"
+	"your-project/internal/handler"
+	"your-project/internal/svc"
+
+	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/service"
-	"github.com/zeromicro/go-zero/rest"
 )
 
-// 配置结构
-type Config struct {
-	rest.RestConf
-	RabbitMqConf rabbitmq.RabbitListenerConf
-}
-
-// 消息结构
-type OrderMessage struct {
-	OrderID string  `json:"order_id"`
-	Amount  float64 `json:"amount"`
-	UserID  string  `json:"user_id"`
-}
-
-// 消费者逻辑
-type OrderProcessor struct {
-	config Config
-}
-
-func NewOrderProcessor(c Config) *OrderProcessor {
-	return &OrderProcessor{config: c}
-}
-
-func (p *OrderProcessor) Consume(ctx context.Context, message []byte) error {
-	var order OrderMessage
-	
-	if err := json.Unmarshal(message, &order); err != nil {
-		logc.Errorf(ctx, "消息解析失败: %v, 原始消息: %s", err, string(message))
-		return err
-	}
-
-	logc.Infof(ctx, "处理订单: ID=%s, 金额=%.2f, 用户=%s", 
-		order.OrderID, order.Amount, order.UserID)
-
-	// 处理业务逻辑
-	// 例如：更新数据库、发送通知等
-	
-	return nil
-}
-
-// 创建消费者服务
-func CreateRabbitMQService(c Config) service.Service {
-	logx.Infof("连接 RabbitMQ: %s:%d, 监听队列: %v",
-		c.RabbitMqConf.Host, c.RabbitMqConf.Port,
-		c.RabbitMqConf.ListenerQueues)
-
-	ctx := context.Background()
-	return rabbitmq.MustNewListener(ctx, c.RabbitMqConf, NewOrderProcessor(c))
-}
+var configFile = flag.String("f", "etc/demoa.yaml", "the config file")
 
 func main() {
 	flag.Parse()
 
-	// 配置消费者队列
-	queueConfig := rabbitmq.ConsumerConf{
-		Name:          "order.queue",
-		MaxRetryCount: 3,
-		AutoAck:       false,  // 手动确认
-		Exclusive:     false,  // 允许多个消费者
-		NoLocal:       false,
-		NoWait:        false,
-	}
-
-	queues := []rabbitmq.ConsumerConf{queueConfig}
-
-	config := Config{
-		RestConf: rest.RestConf{
-			Host: "0.0.0.0",
-			Port: 8080,
-		},
-		RabbitMqConf: rabbitmq.RabbitListenerConf{
-			RabbitConf: rabbitmq.RabbitConf{
-				Username: "guest",
-				Password: "guest",
-				Host:     "localhost",
-				Port:     5672,
-				VHost:    "/",
-			},
-			ListenerQueues: queues,
-			ChannelQos: rabbitmq.ChannelQosConf{
-				PrefetchCount: 10, // 每次预取10条消息
-				PrefetchSize:  0,
-				Global:        false,
-			},
-			ContentType: "application/json",
-		},
-	}
-
-	// 设置服务
-	if err := config.SetUp(); err != nil {
+	var c config.Config
+	conf.MustLoad(*configFile, &c, conf.UseEnv())
+	if err := c.SetUp(); err != nil {
 		panic(err)
 	}
 
-	// 启动服务组
+	ctx := svc.NewServiceContext(c)
+
 	serviceGroup := service.NewServiceGroup()
 	defer serviceGroup.Stop()
 
-	// 添加RabbitMQ消费者服务
-	serviceGroup.Add(CreateRabbitMQService(config))
+	handler.RegisterHandlers(serviceGroup, ctx)
 
-	// 启动服务
+	fmt.Printf("Starting server at %s:%d...\n", c.Host, c.Port)
 	serviceGroup.Start()
 }
 ```
 
 ## ⚙️ 配置说明
 
-### RabbitMQ 基础配置
+### 1. Sender 配置 (RabbitSenderConf)
 
-```go
-type RabbitConf struct {
-	Username string  // 用户名
-	Password string  // 密码
-	Host     string  // 主机地址
-	Port     int     // 端口号
-	VHost    string `json:",optional"` // 虚拟主机
-}
+| 字段 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| Username | string | - | RabbitMQ 账号 |
+| Password | string | - | RabbitMQ 密码 |
+| Host | string | - | RabbitMQ 地址 |
+| Port | int | - | RabbitMQ 端口 |
+| VHost | string | "" | 虚拟主机（可选） |
+| ContentType | string | text/plain | 消息内容类型 |
+
+**YAML 配置示例**：
+```yaml
+RabbitMqSenderConf:
+  Username: guest
+  Password: guest
+  Host: localhost
+  Port: 5672
+  VHost: /
+  ContentType: application/json
 ```
 
-### 生产者配置
+### 2. Listener 配置 (RabbitListenerConf)
 
-```go
-type RabbitSenderConf struct {
-	RabbitConf
-	ContentType string `json:",default=text/plain"` // 消息内容类型
-}
-```
+#### 基础配置
 
-### 消费者配置
+| 字段 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| Username | string | - | RabbitMQ 账号 |
+| Password | string | - | RabbitMQ 密码 |
+| Host | string | - | RabbitMQ 地址 |
+| Port | int | - | RabbitMQ 端口 |
+| VHost | string | "" | 虚拟主机（可选） |
+| ContentType | string | text/plain | 消息内容类型 |
+| ListenerQueues | []ConsumerConf | - | 监听队列配置列表 |
+| ChannelQos | ChannelQosConf | - | 通道 QoS 配置 |
 
-```go
-type RabbitListenerConf struct {
-	RabbitConf
-	ListenerQueues []ConsumerConf  // 监听队列配置
-	ChannelQos     ChannelQosConf  // 通道QoS配置
-	ContentType    string `json:",default=text/plain"` // 消息内容类型
-}
-```
+#### 队列消费配置 (ConsumerConf)
 
-### 队列消费配置
+| 字段 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| Name | string | - | 队列名称 |
+| AutoAck | bool | false | 自动确认。true=投递时自动确认（消息立即删除）；false=框架在消费完成后 ACK |
+| Exclusive | bool | false | 独占模式。true=只允许当前消费者连接此队列 |
+| NoLocal | bool | false | 禁止本地消费（RabbitMQ 不支持） |
+| NoWait | bool | false | 非阻塞模式。true=不等待服务器响应 |
 
-```go
-type ConsumerConf struct {
-	Name          string  // 队列名称
-	MaxRetryCount int32 `json:",default=3"`    // 最大重试次数
-	AutoAck       bool  `json:",default=false"` // 自动确认
-	Exclusive     bool  `json:",default=false"` // 独占模式
-	NoLocal       bool  `json:",default=false"` // 禁止本地消费
-	NoWait        bool  `json:",default=false"` // 非阻塞模式
-}
-```
+#### 通道 QoS 配置 (ChannelQosConf)
 
-### 通道 QoS 配置
+| 字段 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| PrefetchCount | int | 5 | 预取消息数量。未确认消息达到此上限时，RabbitMQ 停止投递新消息 |
+| PrefetchSize | int | 0 | 预取消息总字节大小。0=不限制 |
+| Global | bool | false | QoS 生效范围。false=仅当前消费者；true=影响所有消费者 |
 
-```go
-type ChannelQosConf struct {
-	PrefetchCount int  `json:",default=5"`   // 预取消息数量
-	PrefetchSize  int  `json:",default=0"`   // 预取消息大小（字节）
-	Global        bool `json:",default=false"` // 全局生效
-}
+**YAML 配置示例**：
+```yaml
+GDemoARabbitmqConf:
+  Username: guest
+  Password: guest
+  Host: localhost
+  Port: 5672
+  VHost: /
+  ContentType: application/json
+  ListenerQueues:
+    - Name: queue.demoa
+      AutoAck: false
+      Exclusive: false
+    - Name: queue.demob
+  ChannelQos:
+    PrefetchCount: 10
+    PrefetchSize: 0
+    Global: false
 ```
 
 ## 🔧 高级功能
@@ -273,8 +465,23 @@ type ChannelQosConf struct {
 
 内置 Prometheus 指标收集：
 
-- `mq_consume_total`: 消息消费总数统计
-- `mq_consume_duration_ms`: 消息消费耗时统计
+**Sender 指标**：
+- `mq_sender_send_total`: 消息发送总数 (exchange, route_key, status)
+- `mq_sender_send_duration_ms`: 消息发送耗时 (exchange, route_key)
+- `mq_sender_send_size_bytes`: 消息发送大小 (exchange, route_key)
+- `mq_sender_reconnect_total`: 重连次数
+- `mq_sender_disconnect_total`: 掉线次数
+
+**Listener 指标**：
+- `mq_listener_consume_total`: 消息消费总数 (queue, status)
+- `mq_listener_consume_duration_ms`: 消息消费耗时 (queue)
+- `mq_listener_consume_size_bytes`: 消息消费大小 (queue)
+- `mq_listener_in_flight`: 当前处理中消息数 (queue)
+- `mq_listener_parse_error_total`: 解析失败数 (queue)
+- `mq_listener_panic_total`: Panic 次数 (queue)
+- `mq_listener_ack_total`: ACK/Reject 计数 (queue, type)
+- `mq_listener_reconnect_total`: 重连次数
+- `mq_listener_disconnect_total`: 掉线次数
 
 ### 3. 内置拦截器
 
@@ -285,38 +492,6 @@ type ChannelQosConf struct {
 - **PrometheusInterceptor**: 指标收集
 - **LoggingInterceptor**: 日志记录
 
-### 4. 自定义拦截器
-
-```go
-// 自定义拦截器示例
-func customInterceptor(ctx context.Context, queueName string, message []byte, next func(context.Context, []byte) error) error {
-	start := time.Now()
-	
-	// 前置处理
-	logc.Infof(ctx, "开始处理队列 %s 的消息", queueName)
-	
-	// 执行下一个拦截器或业务逻辑
-	err := next(ctx, message)
-	
-	// 后置处理
-	duration := time.Since(start)
-	if err != nil {
-		logc.Errorf(ctx, "处理失败，耗时: %v, 错误: %v", duration, err)
-	} else {
-		logc.Infof(ctx, "处理成功，耗时: %v", duration)
-	}
-	
-	return err
-}
-
-// 使用自定义拦截器
-interceptor := rabbitmq.Chain(
-	rabbitmq.RecoveryInterceptor,
-	rabbitmq.TraceInterceptor,
-	customInterceptor,  // 添加自定义拦截器
-	rabbitmq.PrometheusInterceptor,
-)
-```
 
 ## 🏆 最佳实践
 

@@ -2,34 +2,27 @@ package rabbitmq
 
 import (
 	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/zeromicro/go-zero/core/logc"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/queue"
 )
 
 // MustNewListener rabbitmq消费者服务端
-func MustNewListener(ctx context.Context, rabbitListenerConf RabbitListenerConf, handler ConsumeHandler) queue.MessageQueue {
+func MustNewListener(rabbitListenerConf RabbitListenerConf, handler ConsumeHandler) queue.MessageQueue {
 	defaultInterceptor := Chain(
 		recoveryInterceptor,
-		traceInterceptor,
 		prometheusInterceptor,
 		loggingInterceptor,
+		traceInterceptor,
 	)
-
-	currentCtx, cancel := context.WithCancel(ctx)
 
 	listener := &RabbitListener{
 		queues:      rabbitListenerConf,
 		handler:     handler,
 		forever:     make(chan bool),
-		rootCtx:     ctx,
-		currentCtx:  currentCtx,
-		cancel:      cancel,
 		taskWg:      sync.WaitGroup{},
 		listenerWg:  sync.WaitGroup{},
 		maxRetry:    10,
@@ -99,6 +92,9 @@ func (q *RabbitListener) connect() error {
 		}
 		return err
 	}
+
+	q.handleChannelClose()
+
 	return nil
 }
 
@@ -107,20 +103,55 @@ func (q *RabbitListener) handleConnectionClose() {
 
 	go func() {
 		for err := range connCloseChan {
+			if q.closed.Load() {
+				logx.Info("Received shutdown signal, skip reconnect on connection close")
+				return
+			}
 			logx.Errorf("Connection closed: %v", err)
+			metricListenerDisconnectTotal.Inc()
+			q.reconnect()
+		}
+	}()
+}
+
+func (q *RabbitListener) handleChannelClose() {
+	chanCloseChan := q.channel.NotifyClose(make(chan *amqp.Error))
+
+	go func() {
+		for err := range chanCloseChan {
+			if q.closed.Load() {
+				logx.Info("Received shutdown signal, skip reconnect on channel close")
+				return
+			}
+			logx.Errorf("Channel closed: %v", err)
+			metricListenerDisconnectTotal.Inc()
 			q.reconnect()
 		}
 	}()
 }
 
 func (q *RabbitListener) reconnect() {
+	// 收到停止信号后不再重连
+	if q.closed.Load() {
+		logx.Info("Received shutdown signal, skip reconnect")
+		return
+	}
+
 	logx.Info("Attempting to reconnect...")
 	q.reconnectMutex.Lock()
 	defer q.reconnectMutex.Unlock()
 
-	if q.cancel != nil {
-		q.cancel()
+	// 加锁后再次检查，避免重复重连
+	if q.closed.Load() {
+		logx.Info("Received shutdown signal after lock, skip reconnect")
+		return
 	}
+	if q.conn != nil && !q.conn.IsClosed() && q.channel != nil {
+		logx.Info("Already reconnected, skip")
+		return
+	}
+
+	// 等待旧 goroutine 自然退出（channel 关闭时自动退出）
 	done := make(chan struct{})
 	go func() {
 		q.listenerWg.Wait()
@@ -135,9 +166,6 @@ func (q *RabbitListener) reconnect() {
 		logx.Errorf("Wait for old routines timeout during reconnect, forcing reconnect.")
 	}
 
-	// 关键：重连时重新派生上下文并保存副本
-	q.currentCtx, q.cancel = context.WithCancel(q.rootCtx)
-
 	if q.channel != nil {
 		_ = q.channel.Close()
 		q.channel = nil
@@ -149,154 +177,85 @@ func (q *RabbitListener) reconnect() {
 
 	if err := q.connect(); err != nil {
 		logx.Errorf("Reconnect failed: %v", err)
-		time.AfterFunc(5*time.Second, q.reconnect)
 		return
 	}
 
-	q.internalStart(q.currentCtx)
+	metricListenerReconnectTotal.Inc()
+	q.internalStart()
 }
 
-func (q *RabbitListener) parseMessage(listenerConsumer ConsumerConf, message amqp.Delivery) (*RabbitMsgBody, error) {
-
-	var msgBody = new(RabbitMsgBody)
-	err := json.Unmarshal(message.Body, msgBody)
-	if err != nil {
-		logx.Errorf("Failed to parse RabbitMQ message payload, delivery: %v, error: %v", message, err)
-		if listenerConsumer.AutoAck == false {
-			// 紧确认消费当前消息，因为此消息当前消费者无法解析，同队列的其他消费者肯定也无法解析，需要确认消费掉，不然一直循环消费
-			message.Ack(false)
-		}
-		return nil, err
-	}
-	return msgBody, nil
-}
-
-func (q *RabbitListener) requeueMessage(ctx context.Context, listenerConsumer ConsumerConf, message amqp.Delivery, retryCount int64) {
-	if message.Headers == nil {
-		message.Headers = make(amqp.Table)
-	}
-	message.Headers["x-retry-count"] = retryCount + 1
-	// 手动重新发布消息（确保 headers 被保留）
-	err := q.channel.Publish(
-		"",
-		listenerConsumer.Name,
-		false,
-		false,
-		amqp.Publishing{
-			Headers:     message.Headers,
-			ContentType: q.queues.ContentType,
-			Body:        message.Body,
-		},
-	)
-	if err != nil {
-		logc.Errorf(ctx, "Failed requeue message: %v,  err: %v", string(message.Body), err)
-	}
-
-	if err == nil {
-		logc.Infof(ctx, "Successfully requeue message : %v", string(message.Body))
-	}
-
-	// 确认原消息（避免重复消费）
-	if !listenerConsumer.AutoAck {
-		message.Ack(false)
-	}
-}
-func (q *RabbitListener) processMessage(listenerConsumer ConsumerConf, message amqp.Delivery, runCtx context.Context) {
-	// 激进拒绝：使用当前协程分配到的 context 快照
-	select {
-	case <-runCtx.Done():
+func (q *RabbitListener) processMessage(listenerConsumer ConsumerConf, message amqp.Delivery) {
+	// 激进拒绝：检查停止信号
+	if q.closed.Load() {
 		_ = message.Reject(true)
+		metricListenerAckTotal.Inc(listenerConsumer.Name, "reject")
 		return
-	default:
 	}
 
 	q.taskWg.Add(1)
-	defer q.taskWg.Done()
+	metricListenerInFlight.Inc(listenerConsumer.Name)
+	defer func() {
+		metricListenerInFlight.Dec(listenerConsumer.Name)
+		q.taskWg.Done()
+	}()
 
 	handleLogic := func(ctx context.Context, rawBody []byte) error {
-		// 业务逻辑内的 context 二次检查
-		select {
-		case <-ctx.Done():
-			return message.Reject(true)
-		default:
+		// 业务逻辑内的二次检查
+		if q.closed.Load() {
+			return context.Canceled
 		}
-
-		msgBody, err := q.parseMessage(listenerConsumer, message)
-		if err != nil {
-			return err
-		}
-
-		var retryCount int64
-		if val, ok := message.Headers["x-retry-count"]; ok {
-			switch v := val.(type) {
-			case int64:
-				retryCount = v
-			case int32:
-				retryCount = int64(v)
-			case int:
-				retryCount = int64(v)
-			}
-		}
-
-		if retryCount > listenerConsumer.MaxRetryCount {
-			if !listenerConsumer.AutoAck {
-				_ = message.Ack(false)
-			}
-			return nil
-		}
-
-		err = q.handler.Consume(ctx, msgBody.Msg)
-		if err != nil {
-			time.Sleep(time.Millisecond * 100)
-			q.requeueMessage(ctx, listenerConsumer, message, retryCount)
-			return err
-		}
-
-		if !listenerConsumer.AutoAck {
-			_ = message.Ack(false)
-		}
-		return nil
+		// rawBody 已经是 traceInterceptor 解析后的业务消息
+		return q.handler.Consume(ctx, rawBody)
 	}
 
-	_ = q.interceptor(runCtx, listenerConsumer.Name, message.Body, handleLogic)
+	_ = q.interceptor(context.Background(), listenerConsumer.Name, message.Body, handleLogic)
+
+	// 统一处理消息确认
+	if !listenerConsumer.AutoAck {
+		if q.closed.Load() {
+			_ = message.Reject(true) // 停止信号 → 重入队列
+			metricListenerAckTotal.Inc(listenerConsumer.Name, "reject")
+		} else {
+			_ = message.Ack(false) // 其他情况（成功或失败）→ 确认消费
+			metricListenerAckTotal.Inc(listenerConsumer.Name, "ack")
+		}
+	}
 }
 
-func (q *RabbitListener) internalStart(runCtx context.Context) {
+func (q *RabbitListener) internalStart() {
 	for i := range q.queues.ListenerQueues {
 		lQueue := q.queues.ListenerQueues[i]
 		q.listenerWg.Add(1)
-		go func(lConsumer ConsumerConf, ctx context.Context) {
+		go func(lConsumer ConsumerConf) {
 			defer q.listenerWg.Done()
 			queueMessages, err := q.channel.Consume(lConsumer.Name, "", lConsumer.AutoAck, false, false, false, nil)
 			if err != nil {
 				logx.Errorf("Failed to consume %s: %v", lConsumer.Name, err)
 				return
 			}
-			for {
-				select {
-				case <-ctx.Done(): // 精准捕获该监听协程对应的信号
+			for message := range queueMessages {
+				if q.closed.Load() {
 					logx.Infof("Exit consumer loop for: %s", lConsumer.Name)
 					return
-				case message, ok := <-queueMessages:
-					if !ok {
-						return
-					}
-					q.processMessage(lConsumer, message, ctx)
 				}
+				q.processMessage(lConsumer, message)
 			}
-		}(lQueue, runCtx)
+		}(lQueue)
 	}
 }
 
 func (q *RabbitListener) Start() {
-	q.internalStart(q.currentCtx)
+	q.internalStart()
 	<-q.forever
 }
 
 func (q *RabbitListener) Stop() {
 	logx.Info("RabbitMQ Listener is shutting down...")
-	if q.cancel != nil {
-		q.cancel()
+	q.closed.Store(true) // 标记已收到停止信号
+
+	// 关闭 channel 让消费者 goroutine 自然退出
+	if q.channel != nil {
+		_ = q.channel.Close()
 	}
 
 	q.listenerWg.Wait() // 先停水龙头
@@ -314,10 +273,6 @@ func (q *RabbitListener) Stop() {
 		logx.Error("Shutdown timeout.")
 	}
 
-	if q.channel != nil {
-
-		_ = q.channel.Close()
-	}
 	if q.conn != nil {
 		_ = q.conn.Close()
 	}

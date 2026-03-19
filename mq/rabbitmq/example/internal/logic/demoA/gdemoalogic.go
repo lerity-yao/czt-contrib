@@ -3,7 +3,7 @@ package demoA
 import (
 	"context"
 
-	"example/example/internal/svc"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/svc"
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
@@ -21,7 +21,7 @@ func NewGDemoALogic(ctx context.Context, svcCtx *svc.ServiceContext) *GDemoALogi
 	}
 }
 
-func (l *GDemoALogic) Consume(ctx context.Context, message []byte) error {
+func (l *GDemoALogic) GDemoA(message []byte) error {
 	// todo: add your logic here and delete this line
 
 	return nil

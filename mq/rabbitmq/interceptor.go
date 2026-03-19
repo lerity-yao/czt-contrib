@@ -8,29 +8,10 @@ import (
 	"time"
 
 	"github.com/zeromicro/go-zero/core/logc"
-	"github.com/zeromicro/go-zero/core/metric"
-	"github.com/zeromicro/go-zero/core/trace"
-	"go.opentelemetry.io/otel"
-	oteltrace "go.opentelemetry.io/otel/trace"
 )
 
 // Interceptor 拦截器定义
 type Interceptor func(ctx context.Context, queueName string, message []byte, next func(context.Context, []byte) error) error
-
-// 指标定义
-var (
-	metricConsumeTotal = metric.NewCounterVec(&metric.CounterVecOpts{
-		Name:   "mq_consume_total",
-		Help:   "RabbitMQ 消费总数统计",
-		Labels: []string{"queue", "status"},
-	})
-	metricConsumeDuration = metric.NewHistogramVec(&metric.HistogramVecOpts{
-		Name:    "mq_consume_duration_ms",
-		Help:    "RabbitMQ 消费耗时统计(ms)",
-		Labels:  []string{"queue"},
-		Buckets: []float64{5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000},
-	})
-)
 
 // Chain 拦截器链构造器
 func Chain(interceptors ...Interceptor) Interceptor {
@@ -54,45 +35,46 @@ func recoveryInterceptor(ctx context.Context, queueName string, body []byte, nex
 	defer func() {
 		if r := recover(); r != nil {
 			logc.Errorf(ctx, "[MQ_PANIC] queue: %s, panic: %v\n%s", queueName, r, debug.Stack())
+			metricListenerPanicTotal.Inc(queueName)
 			err = fmt.Errorf("panic: %v", r)
 		}
 	}()
 	return next(ctx, body)
 }
 
-// 2. Trace 拦截器：自动感知链路并注入
+// 2. Trace 拦截器：解析消息并注入链路
 func traceInterceptor(ctx context.Context, queueName string, body []byte, next func(context.Context, []byte) error) error {
 	var msgBody RabbitMsgBody
 	if err := json.Unmarshal(body, &msgBody); err != nil {
-		return next(ctx, body)
+		logc.Errorf(ctx, "[MQ_PARSE_ERROR] queue: %s, err: %v, payload: %s", queueName, err, string(body))
+		metricListenerParseErrorTotal.Inc(queueName)
+		return fmt.Errorf("failed to parse message: %w", err)
 	}
 
-	propagator := otel.GetTextMapPropagator()
-	extractedCtx := propagator.Extract(ctx, msgBody.Carrier)
-
-	tracer := otel.GetTracerProvider().Tracer(trace.TraceName)
-	childCtx, span := tracer.Start(extractedCtx,
-		fmt.Sprintf("mq-consume-%s", queueName),
-		oteltrace.WithSpanKind(oteltrace.SpanKindConsumer),
-	)
-	defer span.End()
-
-	return next(childCtx, body)
+	// 开启消费者 Span，传递解析后的业务消息
+	childCtx, span := StartConsumerSpan(ctx, queueName, msgBody.Carrier)
+	err := next(childCtx, msgBody.Msg)
+	EndSpan(span, err)
+	return err
 }
 
 // 3. Prometheus 拦截器：自动感知监控
 func prometheusInterceptor(ctx context.Context, queueName string, body []byte, next func(context.Context, []byte) error) error {
 	start := time.Now()
+
+	// 记录消息大小
+	metricListenerConsumeSize.Observe(int64(len(body)), queueName)
+
 	err := next(ctx, body)
 
 	durationMs := time.Since(start).Milliseconds()
-	metricConsumeDuration.Observe(durationMs, queueName)
+	metricListenerConsumeDuration.Observe(durationMs, queueName)
 
 	status := "success"
 	if err != nil {
 		status = "fail"
 	}
-	metricConsumeTotal.Inc(queueName, status)
+	metricListenerConsumeTotal.Inc(queueName, status)
 	return err
 }
 

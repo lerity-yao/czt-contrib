@@ -1,11 +1,11 @@
 package main
 
 import (
-	"example/example/internal/config"
-	"example/example/internal/handler"
-	"example/example/internal/svc"
 	"flag"
 	"fmt"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/config"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/handler"
+	"github.com/lerity-yao/czt-contrib/mq/rabbitmq/example/internal/svc"
 
 	"github.com/zeromicro/go-zero/core/conf"
 	"github.com/zeromicro/go-zero/core/service"

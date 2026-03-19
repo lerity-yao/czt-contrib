@@ -3,13 +3,14 @@ package rabbitmq
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	"go.opentelemetry.io/otel/propagation"
 )
 
 // RabbitMsgBody 消息结构体
-// RabbitMsgBody Carrier OpenTelemetry 链路跟踪 头部数据,注入连裤跟踪数据据
+// RabbitMsgBody Carrier OpenTelemetry 链路跟踪 头部数据，注入链路跟踪数据
 // RabbitMsgBody Msg 内容
 type RabbitMsgBody struct {
 	Carrier *propagation.HeaderCarrier
@@ -31,12 +32,11 @@ type RabbitConf struct {
 }
 
 // RabbitListener 消费者服务端结构体
-// RabbitListener conn AMQP连接
+// RabbitListener conn AMQP 连接
 // RabbitListener channel 通道
 // RabbitListener forever 通到阻塞标志
 // RabbitListener handler 允许客户端注入的消费逻辑
 // RabbitListener queues 队列
-// RabbitListener ctx 上下文
 // RabbitListener maxRetry 服务端端口之后会重连，每次重连的最大次数
 // RabbitListener reconnectMutex 重连锁
 type RabbitListener struct {
@@ -45,14 +45,12 @@ type RabbitListener struct {
 	forever        chan bool
 	handler        ConsumeHandler
 	queues         RabbitListenerConf
-	rootCtx        context.Context
-	currentCtx     context.Context
-	cancel         context.CancelFunc // 新增：用于通知协程停止
-	taskWg         sync.WaitGroup     // 跟踪 processMessage
-	listenerWg     sync.WaitGroup     // 跟踪 internalStart 里的协程
+	taskWg         sync.WaitGroup // 跟踪 processMessage
+	listenerWg     sync.WaitGroup // 跟踪 internalStart 里的协程
 	maxRetry       int
 	reconnectMutex sync.Mutex
 	interceptor    Interceptor
+	closed         atomic.Bool // 标记是否已收到停止信号
 }
 
 // ChannelQosConf 通道qos设置
@@ -69,18 +67,20 @@ type ChannelQosConf struct {
 
 // ConsumerConf 队列消费配置参数
 // ConsumerConf Name  消息队列名称
-// ConsumerConf MaxRetryCount 消费消息重试的最大次数
-// ConsumerConf AutoAck 控制消息确认机制,设置为true,则在消息被消费者拿到之后，队列会立马删除消息，通常要设置为false，在消费成功之后调用Ack(false)来通知队列删除消息，需要配合channel.Qos使用
+// ConsumerConf AutoAck 控制消息确认机制。
+//   - 设置为 true：RabbitMQ 投递消息时自动确认（消息立即删除，无重试机会）
+//   - 设置为 false：框架会在消费完成后调用 Ack(false) 确认（无论成功或失败）
+//   - 框架层不处理重试，业务如需重试请在 handler 中自行实现（如发送延迟队列、记录 DB 等）
+//
 // ConsumerConf Exclusive 队列访问控制模式，当前消费者是否唯一模式。设置true,则只允许当前消费者连接此队列，不允许其他消费者连接，设置false，则允许多个消费者连接队列。
 // ConsumerConf NoLocal 禁止本地消费，即禁止消费者消费自己推送的消息；rabbitmq不支持此模式
 // ConsumerConf NoWait 控制服务器响应机制，设置true为非阻塞模式，连接服务的时候，不会等待服务反馈成功的响应，就执行消费者，无法感知消费者是否创建成功，设置false，阻塞模式，会等待服务响应，成功才进行消费
 type ConsumerConf struct {
-	Name          string
-	MaxRetryCount int64 `json:",default=3"`
-	AutoAck       bool  `json:",default=false"`
-	Exclusive     bool  `json:",default=false"`
-	NoLocal       bool  `json:",default=false"`
-	NoWait        bool  `json:",default=false"`
+	Name      string
+	AutoAck   bool `json:",default=false"`
+	Exclusive bool `json:",default=false"`
+	NoLocal   bool `json:",default=false"`
+	NoWait    bool `json:",default=false"`
 }
 
 type QueueConf struct {
@@ -106,15 +106,10 @@ type ConsumeHandler interface {
 	Consume(ctx context.Context, message []byte) error
 }
 
-type (
-	Sender interface {
-		Send(ctx context.Context, exchange string, routeKey string, msg []byte) error
-		Close() error
-	}
+// HandlerFunc 函数式处理器（推荐，每次消费时创建新 Logic，携带正确的 ctx）
+type HandlerFunc func(ctx context.Context, message []byte) error
 
-	RabbitMqSender struct {
-		conn        *amqp.Connection
-		channel     *amqp.Channel
-		ContentType string
-	}
-)
+// Consume 实现 ConsumeHandler 接口
+func (f HandlerFunc) Consume(ctx context.Context, message []byte) error {
+	return f(ctx, message)
+}
