@@ -366,3 +366,7 @@ func main() {
 ## 14. 许可证
 
 [MIT License](LICENSE)
+
+## 15. 更新日志
+
+查看 [CHANGELOG.md](./CHANGELOG.md)

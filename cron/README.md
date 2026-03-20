@@ -397,6 +397,10 @@ func main() {
 }
 ```
 
+## 更新日志
+
+查看 [CHANGELOG.md](./CHANGELOG.md)
+
 
 
 
