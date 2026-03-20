@@ -22,25 +22,25 @@
 
 | 指标名 | 类型 | Labels | 说明 |
 |--------|------|--------|------|
-| `mq_sender_send_total` | Counter | exchange, route_key, status | 发送总数 |
-| `mq_sender_send_duration_ms` | Histogram | exchange, route_key | 发送耗时 |
-| `mq_sender_send_size_bytes` | Histogram | exchange, route_key | 消息大小 |
-| `mq_sender_reconnect_total` | Counter | - | 重连次数 |
-| `mq_sender_disconnect_total` | Counter | - | 掉线次数 |
+| `rabbitmq_sender_send_total` | Counter | exchange, route_key, status | 发送总数 |
+| `rabbitmq_sender_send_duration_ms` | Histogram | exchange, route_key | 发送耗时 |
+| `rabbitmq_sender_send_size_bytes` | Histogram | exchange, route_key | 消息大小 |
+| `rabbitmq_sender_reconnect_total` | Counter | - | 重连次数 |
+| `rabbitmq_sender_disconnect_total` | Counter | - | 掉线次数 |
 
 **Listener 指标（9个）**：
 
 | 指标名 | 类型 | Labels | 说明 |
 |--------|------|--------|------|
-| `mq_listener_consume_total` | Counter | queue, status | 消费总数 |
-| `mq_listener_consume_duration_ms` | Histogram | queue | 消费耗时 |
-| `mq_listener_consume_size_bytes` | Histogram | queue | 消息大小 |
-| `mq_listener_in_flight` | Gauge | queue | 当前处理中消息数 |
-| `mq_listener_parse_error_total` | Counter | queue | 解析失败数 |
-| `mq_listener_panic_total` | Counter | queue | Panic 次数 |
-| `mq_listener_ack_total` | Counter | queue, type | ACK/Reject 计数 |
-| `mq_listener_reconnect_total` | Counter | - | 重连次数 |
-| `mq_listener_disconnect_total` | Counter | - | 掉线次数 |
+| `rabbitmq_listener_consume_total` | Counter | queue, status | 消费总数 |
+| `rabbitmq_listener_consume_duration_ms` | Histogram | queue | 消费耗时 |
+| `rabbitmq_listener_consume_size_bytes` | Histogram | queue | 消息大小 |
+| `rabbitmq_listener_in_flight` | Gauge | queue | 当前处理中消息数 |
+| `rabbitmq_listener_parse_error_total` | Counter | queue | 解析失败数 |
+| `rabbitmq_listener_panic_total` | Counter | queue | Panic 次数 |
+| `rabbitmq_listener_ack_total` | Counter | queue, type | ACK/Reject 计数 |
+| `rabbitmq_listener_reconnect_total` | Counter | - | 重连次数 |
+| `rabbitmq_listener_disconnect_total` | Counter | - | 掉线次数 |
 
 #### 4. 拦截器优化
 - 调整顺序为：`recovery → prometheus → logging → trace`
@@ -59,10 +59,10 @@
 #### 1. 指标名称变更
 ```diff
 - mq_consume_total
-+ mq_listener_consume_total
++ rabbitmq_listener_consume_total
 
 - mq_consume_duration_ms
-+ mq_listener_consume_duration_ms
++ rabbitmq_listener_consume_duration_ms
 ```
 **影响**: 需要更新 Prometheus 查询和 Grafana 仪表盘
 

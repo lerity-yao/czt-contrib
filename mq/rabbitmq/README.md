@@ -377,22 +377,22 @@ GDemoARabbitmqConf:
 内置 Prometheus 指标收集：
 
 **Sender 指标**：
-- `mq_sender_send_total`: 消息发送总数 (exchange, route_key, status)
-- `mq_sender_send_duration_ms`: 消息发送耗时 (exchange, route_key)
-- `mq_sender_send_size_bytes`: 消息发送大小 (exchange, route_key)
-- `mq_sender_reconnect_total`: 重连次数
-- `mq_sender_disconnect_total`: 掉线次数
+- `rabbitmq_sender_send_total`: 消息发送总数 (exchange, route_key, status)
+- `rabbitmq_sender_send_duration_ms`: 消息发送耗时 (exchange, route_key)
+- `rabbitmq_sender_send_size_bytes`: 消息发送大小 (exchange, route_key)
+- `rabbitmq_sender_reconnect_total`: 重连次数
+- `rabbitmq_sender_disconnect_total`: 掉线次数
 
 **Listener 指标**：
-- `mq_listener_consume_total`: 消息消费总数 (queue, status)
-- `mq_listener_consume_duration_ms`: 消息消费耗时 (queue)
-- `mq_listener_consume_size_bytes`: 消息消费大小 (queue)
-- `mq_listener_in_flight`: 当前处理中消息数 (queue)
-- `mq_listener_parse_error_total`: 解析失败数 (queue)
-- `mq_listener_panic_total`: Panic 次数 (queue)
-- `mq_listener_ack_total`: ACK/Reject 计数 (queue, type)
-- `mq_listener_reconnect_total`: 重连次数
-- `mq_listener_disconnect_total`: 掉线次数
+- `rabbitmq_listener_consume_total`: 消息消费总数 (queue, status)
+- `rabbitmq_listener_consume_duration_ms`: 消息消费耗时 (queue)
+- `rabbitmq_listener_consume_size_bytes`: 消息消费大小 (queue)
+- `rabbitmq_listener_in_flight`: 当前处理中消息数 (queue)
+- `rabbitmq_listener_parse_error_total`: 解析失败数 (queue)
+- `rabbitmq_listener_panic_total`: Panic 次数 (queue)
+- `rabbitmq_listener_ack_total`: ACK/Reject 计数 (queue, type)
+- `rabbitmq_listener_reconnect_total`: 重连次数
+- `rabbitmq_listener_disconnect_total`: 掉线次数
 
 ### 3. 内置拦截器
 

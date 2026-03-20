@@ -36,7 +36,7 @@ func Chain(interceptors ...Interceptor) Interceptor {
 func recoveryInterceptor(ctx context.Context, queueName string, body []byte, next func(context.Context, []byte) error) (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			logc.Errorf(ctx, "[MQ_PANIC] queue: %s, panic: %v\n%s", queueName, r, debug.Stack())
+			logc.Errorf(ctx, "[RABBITMQ_PANIC] queue: %s, panic: %v\n%s", queueName, r, debug.Stack())
 			metricListenerPanicTotal.Inc(queueName)
 			err = fmt.Errorf("panic: %v", r)
 		}
@@ -48,7 +48,7 @@ func recoveryInterceptor(ctx context.Context, queueName string, body []byte, nex
 func traceInterceptor(ctx context.Context, queueName string, body []byte, next func(context.Context, []byte) error) error {
 	var msgBody RabbitMsgBody
 	if err := json.Unmarshal(body, &msgBody); err != nil {
-		logc.Errorf(ctx, "[MQ_PARSE_ERROR] queue: %s, err: %v, payload: %s", queueName, err, string(body))
+		logc.Errorf(ctx, "[RABBITMQ_PARSE_ERROR] queue: %s, err: %v, payload: %s", queueName, err, string(body))
 		metricListenerParseErrorTotal.Inc(queueName)
 		return fmt.Errorf("failed to parse message: %w", err)
 	}
@@ -84,7 +84,7 @@ func prometheusInterceptor(ctx context.Context, queueName string, body []byte, n
 func loggingInterceptor(ctx context.Context, queueName string, body []byte, next func(context.Context, []byte) error) error {
 	err := next(ctx, body)
 	if err != nil {
-		logc.Errorf(ctx, "[MQ_ERROR] queue: %s, err: %v, payload: %s", queueName, err, string(body))
+		logc.Errorf(ctx, "[RABBITMQ_ERROR] queue: %s, err: %v, payload: %s", queueName, err, string(body))
 	}
 	return err
 }
@@ -138,9 +138,9 @@ func senderPrometheusInterceptor(ctx context.Context, exchange, routeKey string,
 func senderLoggingInterceptor(ctx context.Context, exchange, routeKey string, msg []byte, next SenderFunc) error {
 	err := next(ctx, msg)
 	if err != nil {
-		logc.Errorf(ctx, "[MQ_SEND_ERROR] exchange: %s, routeKey: %s, err: %v", exchange, routeKey, err)
+		logc.Errorf(ctx, "[RABBITMQ_SEND_ERROR] exchange: %s, routeKey: %s, err: %v", exchange, routeKey, err)
 	} else {
-		logc.Infof(ctx, "[MQ_SEND_OK] exchange: %s, routeKey: %s, msg: %s", exchange, routeKey, string(msg))
+		logc.Infof(ctx, "[RABBITMQ_SEND_OK] exchange: %s, routeKey: %s, msg: %s", exchange, routeKey, string(msg))
 	}
 	return err
 }
