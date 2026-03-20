@@ -57,7 +57,6 @@ type Config struct {
 package svc
 
 import (
-	"context"
 	"your-project/internal/config"
 	"github.com/lerity-yao/czt-contrib/mq/rabbitmq"
 )
@@ -68,10 +67,9 @@ type ServiceContext struct {
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
-	ctx := context.Background()
 	return &ServiceContext{
 		Config: c,
-		Sender: rabbitmq.MustNewSender(ctx, c.RabbitMqSenderConf),
+		Sender: rabbitmq.MustNewSender(c.RabbitMqSenderConf),
 	}
 }
 ```

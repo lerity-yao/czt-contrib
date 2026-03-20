@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.1.4
+
+### 破坏性变更
+
+#### 1. MustNewSender 去掉 ctx 参数
+```diff
+- rabbitmq.MustNewSender(ctx, conf)
++ rabbitmq.MustNewSender(conf)
+```
+**说明**: 与 MustNewListener 保持一致，初始化时不需要 ctx
+
 ## v0.1.3
 
 ### 新增功能
@@ -71,7 +82,7 @@
 - client, err := rabbitmq.NewClient(ctx, conf)
 + sender, err := rabbitmq.NewSender(conf)
 // 或
-+ sender := rabbitmq.MustNewSender(ctx, conf)
++ sender := rabbitmq.MustNewSender(conf)
 ```
 
 #### 3. Sender 自动注册 shutdown hook

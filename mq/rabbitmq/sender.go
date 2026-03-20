@@ -9,7 +9,6 @@ import (
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"
-	"github.com/zeromicro/go-zero/core/logc"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/proc"
 )
@@ -32,8 +31,8 @@ type (
 	}
 )
 
-func MustNewSender(ctx context.Context, rabbitSenderConf RabbitSenderConf) Sender {
-	logc.Infof(ctx, "rabbitmq sender: %v", rabbitSenderConf)
+func MustNewSender(rabbitSenderConf RabbitSenderConf) Sender {
+	logx.Infof("rabbitmq sender: %v", rabbitSenderConf)
 	s, err := NewSender(rabbitSenderConf)
 	if err != nil {
 		logx.Must(err)
