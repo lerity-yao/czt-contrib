@@ -50,7 +50,7 @@ func (q *RabbitListener) connect() error {
 	}
 
 	if err != nil {
-		logx.Errorf("Failed to connect to RabbitMQ, Reconnect...")
+		logx.Errorf("Failed to connect to RabbitMQ, Reconnect: %v", err)
 		if q.conn != nil {
 			q.conn.Close()
 			q.conn = nil
@@ -85,7 +85,7 @@ func (q *RabbitListener) connect() error {
 	}
 
 	if err != nil {
-		logx.Errorf("Failed to open a channel, Reconnect...")
+		logx.Errorf("Failed to open a channel, Reconnect: %v", err)
 		if q.conn != nil {
 			q.conn.Close()
 			q.conn = nil

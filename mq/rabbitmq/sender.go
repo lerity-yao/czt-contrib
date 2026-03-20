@@ -2,7 +2,6 @@ package rabbitmq
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -13,8 +12,6 @@ import (
 	"github.com/zeromicro/go-zero/core/logc"
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/proc"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
 )
 
 type (
@@ -30,7 +27,8 @@ type (
 		rabbitConf     RabbitConf
 		maxRetry       int
 		reconnectMutex sync.Mutex
-		closed         atomic.Bool // 标记是否已收到停止信号
+		closed         atomic.Bool       // 标记是否已收到停止信号
+		interceptor    SenderInterceptor // 拦截器链
 	}
 )
 
@@ -44,10 +42,17 @@ func MustNewSender(ctx context.Context, rabbitSenderConf RabbitSenderConf) Sende
 }
 
 func NewSender(rabbitMqConf RabbitSenderConf) (Sender, error) {
+	defaultInterceptor := SenderChain(
+		senderPrometheusInterceptor,
+		senderLoggingInterceptor,
+		senderTraceInterceptor,
+	)
+
 	sender := &RabbitMqSender{
 		ContentType: rabbitMqConf.ContentType,
 		rabbitConf:  rabbitMqConf.RabbitConf,
 		maxRetry:    10,
+		interceptor: defaultInterceptor,
 	}
 	if err := sender.connect(); err != nil {
 		return nil, err
@@ -84,7 +89,7 @@ func (q *RabbitMqSender) connect() error {
 	}
 
 	if err != nil {
-		logx.Errorf("Failed to connect to RabbitMQ after %d retries", q.maxRetry)
+		logx.Errorf("Failed to connect to RabbitMQ after %d retries: %v", q.maxRetry, err)
 		if q.conn != nil {
 			q.conn.Close()
 			q.conn = nil
@@ -107,7 +112,7 @@ func (q *RabbitMqSender) connect() error {
 	}
 
 	if err != nil {
-		logx.Errorf("Failed to open a channel after %d retries", q.maxRetry)
+		logx.Errorf("Failed to open a channel after %d retries: %v", q.maxRetry, err)
 		if q.conn != nil {
 			q.conn.Close()
 			q.conn = nil
@@ -193,71 +198,31 @@ func (q *RabbitMqSender) reconnect() error {
 }
 
 func (q *RabbitMqSender) Send(ctx context.Context, exchange string, routeKey string, msg []byte) error {
-	start := time.Now()
-
 	// 检查连接和通道状态，如果已关闭尝试重连
 	if q.conn == nil || q.conn.IsClosed() || q.channel == nil {
 		if err := q.reconnect(); err != nil {
 			metricSenderSendTotal.Inc(exchange, routeKey, "fail")
-			metricSenderSendDuration.Observe(time.Since(start).Milliseconds(), exchange, routeKey)
-			return errors.New("connection closed and reconnect failed")
+			return fmt.Errorf("connection closed and reconnect failed: %w", err)
 		}
 	}
 
-	// 记录消息大小
-	metricSenderSendSize.Observe(int64(len(msg)), exchange, routeKey)
-
-	// 开启生产者 Span
-	_, span := StartProducerSpan(ctx, exchange, routeKey)
-	defer func() {
-		if err := recover(); err != nil {
-			EndSpan(span, fmt.Errorf("panic: %v", err))
-			panic(err)
-		}
-	}()
-
-	// 注入 trace 上下文到 carrier
-	carrier := &propagation.HeaderCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, carrier)
-
-	msgBody := &RabbitMsgBody{
-		Carrier: carrier,
-		Msg:     msg,
+	// 核心发送函数（接收包装后的消息）
+	corePublish := func(ctx context.Context, wrappedMsg []byte) error {
+		return q.channel.PublishWithContext(
+			ctx,
+			exchange,
+			routeKey,
+			false,
+			false,
+			amqp.Publishing{
+				ContentType: q.ContentType,
+				Body:        wrappedMsg,
+			},
+		)
 	}
 
-	msgBodyMap, err := json.Marshal(msgBody)
-	if err != nil {
-		EndSpan(span, err)
-		metricSenderSendTotal.Inc(exchange, routeKey, "fail")
-		metricSenderSendDuration.Observe(time.Since(start).Milliseconds(), exchange, routeKey)
-		return err
-	}
-
-	err = q.channel.PublishWithContext(
-		ctx,
-		exchange,
-		routeKey,
-		false,
-		false,
-		amqp.Publishing{
-			ContentType: q.ContentType,
-			Body:        msgBodyMap,
-		},
-	)
-
-	if err != nil {
-		logc.Infof(ctx, "Failed to publish a message, error: %v", err)
-		EndSpan(span, err)
-		metricSenderSendTotal.Inc(exchange, routeKey, "fail")
-		metricSenderSendDuration.Observe(time.Since(start).Milliseconds(), exchange, routeKey)
-		return err
-	}
-
-	logc.Infof(ctx, "Successfully publish a message, message: %v", string(msg))
-	EndSpan(span, nil)
-	metricSenderSendTotal.Inc(exchange, routeKey, "success")
-	metricSenderSendDuration.Observe(time.Since(start).Milliseconds(), exchange, routeKey)
-	return nil
+	// 通过拦截器链执行
+	return q.interceptor(ctx, exchange, routeKey, msg, corePublish)
 }
 
 func (q *RabbitMqSender) Close() error {
