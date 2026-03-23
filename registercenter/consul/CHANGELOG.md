@@ -1,5 +1,7 @@
 # Changelog
 
+所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+
 ## v0.1.6
 
 - 升级 Go 版本至 1.24.0
