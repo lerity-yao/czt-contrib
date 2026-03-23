@@ -1,0 +1,1 @@
+{"id":"preferences.keymap","name":"|b|messages.KeyMapBundle|k|keymap.display.name|","entries":[{"hit":"Create a new cztctl .cron file","path":"ActionManager"},{"hit":"Create a new cztctl .rabbitmq file","path":"ActionManager"},{"hit":"Cron File (.cron)","path":"ActionManager"},{"hit":"RabbitMQ File (.rabbitmq)","path":"ActionManager"}]}

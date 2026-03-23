@@ -1,0 +1,184 @@
+package rabbitmq
+
+import (
+	"errors"
+	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gookit/color"
+	"github.com/lerity-yao/czt-contrib/cztctl/api/apiutil"
+	"github.com/lerity-yao/czt-contrib/cztctl/api/parser"
+	"github.com/lerity-yao/czt-contrib/cztctl/config"
+	"github.com/lerity-yao/czt-contrib/cztctl/pkg/golang"
+	"github.com/lerity-yao/czt-contrib/cztctl/util"
+	"github.com/lerity-yao/czt-contrib/cztctl/util/pathx"
+	"github.com/spf13/cobra"
+)
+
+const tmpFile = "%s-%d"
+
+var (
+	tmpDir = path.Join(os.TempDir(), "cztctl")
+	// VarStringDir describes the directory.
+	VarStringDir string
+	// VarStringAPI describes the API.
+	VarStringAPI string
+	// VarStringHome describes the go home.
+	VarStringHome string
+	// VarStringRemote describes the remote git repository.
+	VarStringRemote string
+	// VarStringBranch describes the branch.
+	VarStringBranch string
+	// VarStringStyle describes the style of output files.
+	VarStringStyle  string
+	VarBoolWithTest bool
+	// VarBoolTypeGroup describes whether to group types.
+	VarBoolTypeGroup bool
+)
+
+// GoRabbitmqCommand gen go rabbitmq project files from command line
+func GoRabbitmqCommand(_ *cobra.Command, _ []string) error {
+	apiFile := VarStringAPI
+	dir := VarStringDir
+	namingStyle := VarStringStyle
+	home := VarStringHome
+	remote := VarStringRemote
+	branch := VarStringBranch
+	if len(remote) > 0 {
+		repo, _ := util.CloneIntoGitHome(remote, branch)
+		if len(repo) > 0 {
+			home = repo
+		}
+	}
+
+	if len(home) > 0 {
+		pathx.RegisterGoctlHome(home)
+	}
+	if len(apiFile) == 0 {
+		return errors.New("missing -api")
+	}
+	if len(dir) == 0 {
+		return errors.New("missing -dir")
+	}
+
+	return DoGenProject(apiFile, dir, namingStyle, VarBoolWithTest)
+}
+
+// DoGenProject gen go project files with rabbitmq file
+func DoGenProject(apiFile, dir, style string, withTest bool) error {
+	api, err := parser.Parse(apiFile, nil)
+	if err != nil {
+		return err
+	}
+
+	if err := api.Validate(); err != nil {
+		return err
+	}
+
+	cfg, err := config.NewConfig(style)
+	if err != nil {
+		return err
+	}
+
+	if err := pathx.MkdirIfNotExist(dir); err != nil {
+		return err
+	}
+
+	rootPkg, projectPkg, err := golang.GetParentPackage(dir)
+	if err != nil {
+		return err
+	}
+
+	if err := genEtc(dir, cfg, api); err != nil {
+		return err
+	}
+	if err := genConfig(dir, cfg, api); err != nil {
+		return err
+	}
+	if err := genMain(dir, rootPkg, projectPkg, cfg, api); err != nil {
+		return err
+	}
+	if err := genServiceContext(dir, rootPkg, cfg); err != nil {
+		return err
+	}
+	if err := genTypes(dir, cfg, api); err != nil {
+		return err
+	}
+	if err := genListener(dir, rootPkg, cfg, api); err != nil {
+		return err
+	}
+	if err := genHandlers(dir, rootPkg, projectPkg, cfg, api); err != nil {
+		return err
+	}
+	if err := genLogic(dir, rootPkg, cfg, api); err != nil {
+		return err
+	}
+
+	if err := backupAndSweep(apiFile); err != nil {
+		return err
+	}
+
+	fmt.Println(color.Green.Render("Done."))
+	return nil
+}
+
+func backupAndSweep(apiFile string) error {
+	var err error
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+	_ = os.MkdirAll(tmpDir, os.ModePerm)
+
+	go func() {
+		_, fileName := filepath.Split(apiFile)
+		_, e := apiutil.Copy(apiFile, fmt.Sprintf(path.Join(tmpDir, tmpFile), fileName, time.Now().Unix()))
+		if e != nil {
+			err = e
+		}
+		wg.Done()
+	}()
+	go func() {
+		if e := sweep(); e != nil {
+			err = e
+		}
+		wg.Done()
+	}()
+	wg.Wait()
+
+	return err
+}
+
+func sweep() error {
+	keepTime := time.Now().AddDate(0, 0, -7)
+	return filepath.Walk(tmpDir, func(fpath string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+
+		pos := strings.LastIndexByte(info.Name(), '-')
+		if pos > 0 {
+			timestamp := info.Name()[pos+1:]
+			seconds, err := strconv.ParseInt(timestamp, 10, 64)
+			if err != nil {
+				fmt.Println(color.Red.Sprintf("sweep ignored file: %s", fpath))
+				return nil
+			}
+
+			tm := time.Unix(seconds, 0)
+			if tm.Before(keepTime) {
+				if err := os.RemoveAll(fpath); err != nil {
+					fmt.Println(color.Red.Sprintf("failed to remove file: %s", fpath))
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+}

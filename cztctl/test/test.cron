@@ -1,0 +1,45 @@
+syntax = "v1"
+
+
+info (
+    title: "用户管理系统 cron"
+    desc: "提供用户增删改查、权限管理等功能"
+    version: "1.0"
+    author: "张三"
+    email: "zhangsan@example.com"
+    department: "技术部"
+)
+
+type (
+    DemoAReq {
+        UserId int64 `json:"userId"`
+        Action string `json:"action"`
+    }
+)
+
+@server (
+    tags: "用户管理"
+    summary: "用户相关定时任务集合"
+    group: user
+    description: "用户管理相关的定时任务"
+    middleware: LogMiddleware
+)
+service userCron {
+    @doc "简单的文档注释"
+    @cron "*/1 * * * *"
+    @cronRetry 3
+    @handler CleanUserJob
+    CleanUserTask(DemoAReq)
+
+    @doc(
+        summary: "数据归档任务"
+        description: "用于归档历史数据"
+    )
+    @cron "dsds"
+    @handler ArchiveDataJob
+    ArchiveDataTask
+
+    @doc "外部触发任务"
+    @handler SendEmailJob
+    SendEmailTask(DemoAReq)
+}

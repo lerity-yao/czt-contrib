@@ -1,0 +1,12 @@
+Created-By: Gradle 8.12
+Version: 0.0.1
+Build-JVM: 21.0.8 (JetBrains s.r.o. 21.0.8+9-b1038.71)
+Build-OS: Linux 6.6.104-amd64-desktop-hwe amd64
+Build-Plugin: IntelliJ Platform Gradle Plugin
+Build-Plugin-Version: 2.5.0
+Platform-Type: GO
+Platform-Version: 2025.2.2
+Platform-Build: 252.26199.158
+Kotlin-Available: true
+Kotlin-Stdlib-Bundled: true
+Kotlin-Version: 2.2.0

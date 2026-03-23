@@ -1,0 +1,322 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "cztctl DSL",
+  "scopeName": "source.cztctl",
+  "fileTypes": ["cron", "rabbitmq"],
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#syntax-stmt" },
+    { "include": "#info-block" },
+    { "include": "#import-stmt" },
+    { "include": "#type-block" },
+    { "include": "#at-server-block" },
+    { "include": "#service-block" },
+    { "include": "#strings" },
+    { "include": "#raw-strings" },
+    { "include": "#numbers" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.cztctl",
+          "match": "//.*$"
+        },
+        {
+          "name": "comment.block.cztctl",
+          "begin": "/\\*",
+          "end": "\\*/"
+        }
+      ]
+    },
+
+    "strings": {
+      "name": "string.quoted.double.cztctl",
+      "begin": "\"",
+      "end": "\"",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.cztctl" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.cztctl" } },
+      "patterns": [
+        {
+          "name": "constant.character.escape.cztctl",
+          "match": "\\\\."
+        }
+      ]
+    },
+
+    "raw-strings": {
+      "name": "string.quoted.other.backtick.cztctl",
+      "begin": "`",
+      "end": "`",
+      "beginCaptures": { "0": { "name": "punctuation.definition.string.begin.cztctl" } },
+      "endCaptures": { "0": { "name": "punctuation.definition.string.end.cztctl" } }
+    },
+
+    "numbers": {
+      "name": "constant.numeric.cztctl",
+      "match": "\\b[0-9]+\\b"
+    },
+
+    "base-types": {
+      "name": "storage.type.builtin.cztctl",
+      "match": "\\b(bool|uint8|uint16|uint32|uint64|int8|int16|int32|int64|float32|float64|complex64|complex128|string|int|uint|uintptr|byte|rune|any|interface\\{\\})\\b"
+    },
+
+    "syntax-stmt": {
+      "match": "\\b(syntax)\\s*(=)\\s*(\"[^\"]*\")",
+      "captures": {
+        "1": { "name": "keyword.control.syntax.cztctl" },
+        "2": { "name": "keyword.operator.assignment.cztctl" },
+        "3": { "name": "string.quoted.double.cztctl" }
+      }
+    },
+
+    "info-block": {
+      "begin": "\\b(info)\\s*(\\()",
+      "end": "\\)",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.info.cztctl" },
+        "2": { "name": "punctuation.section.parens.begin.cztctl" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.section.parens.end.cztctl" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#kv-pair" }
+      ]
+    },
+
+    "kv-pair": {
+      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(:)\\s*(\"[^\"]*\"|`[^`]*`|[^\\s,)]+)?",
+      "captures": {
+        "1": { "name": "variable.other.property.cztctl" },
+        "2": { "name": "punctuation.separator.colon.cztctl" },
+        "3": { "name": "string.quoted.double.cztctl" }
+      }
+    },
+
+    "import-stmt": {
+      "patterns": [
+        {
+          "comment": "import group: import ( ... )",
+          "begin": "\\b(import)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.import.cztctl" },
+            "2": { "name": "punctuation.section.parens.begin.cztctl" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.parens.end.cztctl" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#strings" }
+          ]
+        },
+        {
+          "comment": "import literal: import \"xxx\"",
+          "match": "\\b(import)\\s+(\"[^\"]*\")",
+          "captures": {
+            "1": { "name": "keyword.control.import.cztctl" },
+            "2": { "name": "string.quoted.double.cztctl" }
+          }
+        }
+      ]
+    },
+
+    "type-block": {
+      "patterns": [
+        {
+          "comment": "type group: type ( ... )",
+          "begin": "\\b(type)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.type.cztctl" },
+            "2": { "name": "punctuation.section.parens.begin.cztctl" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.parens.end.cztctl" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#struct-body" },
+            { "include": "#type-name" },
+            { "include": "#base-types" },
+            { "include": "#raw-strings" },
+            { "include": "#numbers" }
+          ]
+        },
+        {
+          "comment": "type literal: type Name { ... }",
+          "begin": "\\b(type)\\s+([A-Z][a-zA-Z0-9_]*)\\s*(=?)\\s*(\\{)",
+          "end": "\\}",
+          "beginCaptures": {
+            "1": { "name": "keyword.control.type.cztctl" },
+            "2": { "name": "entity.name.type.cztctl" },
+            "3": { "name": "keyword.operator.assignment.cztctl" },
+            "4": { "name": "punctuation.section.braces.begin.cztctl" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.braces.end.cztctl" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#struct-field" },
+            { "include": "#base-types" },
+            { "include": "#raw-strings" }
+          ]
+        },
+        {
+          "comment": "type alias: type Name = OtherType",
+          "match": "\\b(type)\\s+([A-Z][a-zA-Z0-9_]*)\\s*(=)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.control.type.cztctl" },
+            "2": { "name": "entity.name.type.cztctl" },
+            "3": { "name": "keyword.operator.assignment.cztctl" },
+            "4": { "name": "entity.name.type.cztctl" }
+          }
+        }
+      ]
+    },
+
+    "type-name": {
+      "match": "\\b([A-Z][a-zA-Z0-9_]*)\\b",
+      "name": "entity.name.type.cztctl"
+    },
+
+    "struct-body": {
+      "begin": "\\{",
+      "end": "\\}",
+      "beginCaptures": { "0": { "name": "punctuation.section.braces.begin.cztctl" } },
+      "endCaptures": { "0": { "name": "punctuation.section.braces.end.cztctl" } },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#struct-field" },
+        { "include": "#base-types" },
+        { "include": "#raw-strings" }
+      ]
+    },
+
+    "struct-field": {
+      "match": "\\b([A-Z][a-zA-Z0-9_]*)\\s+(\\*?(?:map\\[[^\\]]+\\])?\\[?\\]?[a-zA-Z_][a-zA-Z0-9_]*)\\s*(`[^`]*`)?",
+      "captures": {
+        "1": { "name": "variable.other.field.cztctl" },
+        "2": { "name": "storage.type.cztctl" },
+        "3": { "name": "string.quoted.other.backtick.cztctl" }
+      }
+    },
+
+    "at-server-block": {
+      "begin": "(@server)\\s*(\\()",
+      "end": "\\)",
+      "beginCaptures": {
+        "1": { "name": "keyword.other.annotation.server.cztctl" },
+        "2": { "name": "punctuation.section.parens.begin.cztctl" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.section.parens.end.cztctl" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#kv-pair" }
+      ]
+    },
+
+    "service-block": {
+      "begin": "\\b(service)\\s+([a-zA-Z][a-zA-Z0-9-]*)\\s*(\\{)",
+      "end": "\\}",
+      "beginCaptures": {
+        "1": { "name": "keyword.control.service.cztctl" },
+        "2": { "name": "entity.name.class.service.cztctl" },
+        "3": { "name": "punctuation.section.braces.begin.cztctl" }
+      },
+      "endCaptures": {
+        "0": { "name": "punctuation.section.braces.end.cztctl" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#at-doc" },
+        { "include": "#at-cron" },
+        { "include": "#at-cron-retry" },
+        { "include": "#at-handler" },
+        { "include": "#route-line" },
+        { "include": "#strings" }
+      ]
+    },
+
+    "at-doc": {
+      "patterns": [
+        {
+          "comment": "@doc with KV block",
+          "begin": "(@doc)\\s*(\\()",
+          "end": "\\)",
+          "beginCaptures": {
+            "1": { "name": "keyword.other.annotation.doc.cztctl" },
+            "2": { "name": "punctuation.section.parens.begin.cztctl" }
+          },
+          "endCaptures": {
+            "0": { "name": "punctuation.section.parens.end.cztctl" }
+          },
+          "patterns": [
+            { "include": "#comments" },
+            { "include": "#kv-pair" }
+          ]
+        },
+        {
+          "comment": "@doc with string literal",
+          "match": "(@doc)\\s+(\"[^\"]*\")",
+          "captures": {
+            "1": { "name": "keyword.other.annotation.doc.cztctl" },
+            "2": { "name": "string.quoted.double.cztctl" }
+          }
+        }
+      ]
+    },
+
+    "at-cron": {
+      "match": "(@cron)\\s+(\"[^\"]*\")",
+      "captures": {
+        "1": { "name": "keyword.other.annotation.cron.cztctl" },
+        "2": { "name": "string.quoted.double.cztctl" }
+      }
+    },
+
+    "at-cron-retry": {
+      "match": "(@cronRetry)\\s+([0-9]+)",
+      "captures": {
+        "1": { "name": "keyword.other.annotation.cronretry.cztctl" },
+        "2": { "name": "constant.numeric.cztctl" }
+      }
+    },
+
+    "at-handler": {
+      "match": "(@handler)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+      "captures": {
+        "1": { "name": "keyword.other.annotation.handler.cztctl" },
+        "2": { "name": "entity.name.function.handler.cztctl" }
+      }
+    },
+
+    "route-line": {
+      "patterns": [
+        {
+          "comment": "cron: TaskName(ReqType) or TaskName",
+          "match": "^\\s*([A-Z][a-zA-Z0-9_]*)(?:\\(([A-Z][a-zA-Z0-9_]*)\\))?\\s*$",
+          "captures": {
+            "1": { "name": "entity.name.function.task.cztctl" },
+            "2": { "name": "entity.name.type.cztctl" }
+          }
+        },
+        {
+          "comment": "rabbitmq: queue.name(MsgType) or queue.name",
+          "match": "^\\s*([a-z][a-zA-Z0-9]*(?:\\.[a-z][a-zA-Z0-9]*)*)(?:\\(([A-Z][a-zA-Z0-9_]*)\\))?\\s*$",
+          "captures": {
+            "1": { "name": "entity.name.tag.queue.cztctl" },
+            "2": { "name": "entity.name.type.cztctl" }
+          }
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,160 @@
+<idea-plugin>
+  <idea-version since-build="243" until-build="253.*" />
+  <version>0.0.1</version>
+  <id>com.cztctl.intellij</id>
+  <name>cztctl</name>
+  <vendor>lerity-yao</vendor>
+  <description><![CDATA[<h2>cztctl</h2>
+        <p>
+            <a href="https://go-zero.dev">go-zero</a> 微服务框架扩展代码生成工具 <a href="https://github.com/lerity-yao/czt-contrib/cztctl">cztctl</a> 的 IDE 插件。
+            支持 <code>.cron</code>（定时任务）和 <code>.rabbitmq</code>（消息队列）DSL 文件的语法高亮、语义着色、语法错误检查、代码导航与代码模板。
+        </p>
+
+        <h3>语法高亮 + 语义着色</h3>
+        <p>基于 ANTLR4 全量解析，覆盖 DSL 全部语法元素，并提供上下文感知的语义配色：</p>
+        <ul>
+            <li><b>关键字</b> — <code>syntax</code>、<code>info</code>、<code>import</code>、<code>type</code>、<code>service</code>（模块关键字加粗斜体高亮）</li>
+            <li><b>注解</b> — <code>@server</code>（独立配色）、<code>@doc</code>、<code>@handler</code>、<code>@cron</code>、<code>@cronRetry</code></li>
+            <li><b>类型系统</b> — 结构体名称（加粗）、字段名称、字段类型、struct tag 各有独立颜色</li>
+            <li><b>路由行</b> — cron 任务标识符、rabbitmq 队列名称、路由参数（加粗斜体）</li>
+            <li><b>info / @server 模块</b> — KV 键名独立配色，@server 非字符串值斜体高亮</li>
+            <li><b>service 模块</b> — 服务名称、handler 名称、注解关键字各有独立颜色</li>
+            <li><b>注释</b> — 单行注释 <code>//</code>、块注释 <code>/* */</code></li>
+            <li><b>字符串</b> — 双引号字符串、反引号原始字符串</li>
+        </ul>
+
+        <h3>语法错误检查</h3>
+        <p>基于 ANTLR4 Parser 全量解析，实时检测语法错误并以红色波浪线标注：</p>
+        <ul>
+            <li>缺少必填声明（syntax / service）</li>
+            <li>括号/大括号不匹配</li>
+            <li>注解格式错误（@cron / @handler / @doc）</li>
+            <li>结构体字段定义错误</li>
+            <li>service route 格式错误</li>
+        </ul>
+
+        <h3>代码导航</h3>
+        <p><b>Ctrl+Click</b>（或 Cmd+Click）跳转：</p>
+        <ul>
+            <li><b>路由参数</b> — 点击路由行中的类型参数（如 <code>OrderCancelReq</code>），跳转到对应的 type 定义</li>
+            <li><b>import 路径</b> — 点击 import 的文件路径字符串，打开对应文件</li>
+            <li>支持跨文件解析：自动在当前文件和 import 引入的文件中查找类型定义</li>
+        </ul>
+
+        <h3>快速创建文件</h3>
+        <p>右键目录 → <b>New</b> 菜单中提供：</p>
+        <ul>
+            <li><b>Cron File (.cron)</b> — 创建带基础结构的 .cron 定时任务文件</li>
+            <li><b>RabbitMQ File (.rabbitmq)</b> — 创建带基础结构的 .rabbitmq 消息队列文件</li>
+        </ul>
+
+        <h3>Live Templates（代码模板）</h3>
+        <p>输入缩写后按 <b>Tab</b> 键即可快速展开，共 18 个模板：</p>
+        <table>
+            <tr><th>缩写</th><th>说明</th></tr>
+            <tr><td><code>syntax</code></td><td>syntax 版本声明</td></tr>
+            <tr><td><code>info</code></td><td>info 元信息块</td></tr>
+            <tr><td><code>import</code></td><td>import 单文件导入</td></tr>
+            <tr><td><code>type</code></td><td>type 结构体声明</td></tr>
+            <tr><td><code>typeg</code></td><td>type 分组结构体声明</td></tr>
+            <tr><td><code>server</code></td><td>@server 注解块</td></tr>
+            <tr><td><code>serverfull</code></td><td>@server 完整注解块（tags/summary/group/middleware）</td></tr>
+            <tr><td><code>service</code></td><td>service 服务块</td></tr>
+            <tr><td><code>@doc</code></td><td>@doc 字符串文档注解</td></tr>
+            <tr><td><code>@dockv</code></td><td>@doc KV 文档注解</td></tr>
+            <tr><td><code>@handler</code></td><td>@handler 处理器名称</td></tr>
+            <tr><td><code>@cron</code></td><td>@cron 定时表达式</td></tr>
+            <tr><td><code>@cronRetry</code></td><td>@cronRetry 重试次数</td></tr>
+            <tr><td><code>crontask</code></td><td>完整的内部定时任务（@doc + @cron + @cronRetry + @handler + 路由）</td></tr>
+            <tr><td><code>exttask</code></td><td>外部触发任务（无 @cron，仅 @doc + @handler + 路由）</td></tr>
+            <tr><td><code>consumer</code></td><td>RabbitMQ 消费者（@doc + @handler + 队列路由）</td></tr>
+            <tr><td><code>cronfile</code></td><td>.cron 完整文件模板</td></tr>
+            <tr><td><code>mqfile</code></td><td>.rabbitmq 完整文件模板</td></tr>
+        </table>
+
+        <h3>支持的文件类型</h3>
+        <ul>
+            <li><code>*.cron</code> — 定时任务服务定义文件</li>
+            <li><code>*.rabbitmq</code> — RabbitMQ 消息队列消费者服务定义文件</li>
+        </ul>
+
+        <h3>DSL 语法示例</h3>
+        <p><b>.cron 文件：</b></p>
+        <pre><code>
+syntax = "v1"
+
+info (
+    title: "定时任务服务"
+    desc: "订单超时自动取消"
+)
+
+type OrderCancelReq {
+    OrderId int64 `json:"orderId"`
+}
+
+@server (
+    group: order
+)
+service order-cron {
+    @doc "订单超时取消"
+    @cron "*/5 * * * *"
+    @cronRetry 3
+    @handler OrderCancel
+    OrderCancelTask(OrderCancelReq)
+}
+        </code></pre>
+        <p><b>.rabbitmq 文件：</b></p>
+        <pre><code>
+syntax = "v1"
+
+type PaymentMsg {
+    OrderId int64  `json:"orderId"`
+    Amount  string `json:"amount"`
+}
+
+service payment-mq {
+    @doc "支付成功回调"
+    @handler PaymentSuccess
+    payment.success(PaymentMsg)
+}
+        </code></pre>]]></description>
+  <change-notes><![CDATA[<h3>0.0.1</h3>
+        <ul>
+            <li>初始版本</li>
+            <li>基于 ANTLR4 全量解析的语法高亮</li>
+            <li>上下文感知的语义着色（info / type / @server / service 各模块独立配色）</li>
+            <li>语法错误实时检查（红色波浪线）</li>
+            <li>文件类型语义校验（.rabbitmq 禁止 @cron / @cronRetry）</li>
+            <li>代码导航：Ctrl+Click 路由参数跳转到 type 定义，import 路径跳转到对应文件</li>
+            <li>快速创建文件：右键 New → Cron File (.cron) / RabbitMQ File (.rabbitmq)</li>
+            <li>18 个 Live Templates 代码模板</li>
+            <li>支持 .cron 和 .rabbitmq 文件类型</li>
+        </ul>]]></change-notes>
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.lang</depends>
+  <extensions defaultExtensionNs="com.intellij">
+    <!-- FileType: register .cron and .rabbitmq -->
+    <fileType name="cztctl DSL" language="cztctl" implementationClass="com.cztctl.intellij.CztctlFileType" extensions="cron;rabbitmq" fieldName="INSTANCE" />
+    <!-- ParserDefinition -->
+    <lang.parserDefinition language="cztctl" implementationClass="com.cztctl.intellij.parser.CztctlParserDefinition" />
+    <!-- SyntaxHighlighter -->
+    <lang.syntaxHighlighterFactory language="cztctl" implementationClass="com.cztctl.intellij.highlight.CztctlSyntaxHighlighterFactory" />
+    <!-- ExternalAnnotator for ANTLR4 error detection -->
+    <externalAnnotator language="cztctl" implementationClass="com.cztctl.intellij.annotator.CztctlExternalAnnotator" />
+    <!-- Goto Declaration: Ctrl+Click on route params / import paths -->
+    <gotoDeclarationHandler implementation="com.cztctl.intellij.navigation.CztctlGotoDeclarationHandler" />
+    <!-- Live Templates -->
+    <defaultLiveTemplates file="/liveTemplates/cztctl.xml" />
+    <!-- Internal File Templates -->
+    <internalFileTemplate name="Cztctl Cron File" />
+    <internalFileTemplate name="Cztctl RabbitMQ File" />
+  </extensions>
+  <actions>
+    <action id="cztctl.NewCronFile" class="com.cztctl.intellij.action.CztctlNewCronFileAction" text="Cron File (.cron)" description="Create a new cztctl .cron file">
+      <add-to-group group-id="NewGroup" anchor="last" />
+    </action>
+    <action id="cztctl.NewRabbitmqFile" class="com.cztctl.intellij.action.CztctlNewRabbitmqFileAction" text="RabbitMQ File (.rabbitmq)" description="Create a new cztctl .rabbitmq file">
+      <add-to-group group-id="NewGroup" anchor="last" />
+    </action>
+  </actions>
+</idea-plugin>

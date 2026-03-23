@@ -12,12 +12,6 @@ import (
 )
 
 var (
-	metricConsumeTotal = metric.NewCounterVec(&metric.CounterVecOpts{
-		Name:   "cron_consume_total",
-		Help:   "消费总数统计",
-		Labels: []string{"task_type", "status"},
-	})
-
 	metricConsumeDuration = metric.NewHistogramVec(&metric.HistogramVecOpts{
 		Name:    "cron_consume_duration_ms",
 		Help:    "消费耗时统计(ms)",
@@ -81,11 +75,6 @@ func PrometheusMiddleware(next asynq.Handler) asynq.Handler {
 		durationMs := time.Since(start).Milliseconds()
 		metricConsumeDuration.Observe(durationMs, t.Type())
 
-		status := "success"
-		if err != nil {
-			status = "fail"
-		}
-		metricConsumeTotal.Inc(t.Type(), status)
 		return err
 	})
 }

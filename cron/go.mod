@@ -4,7 +4,6 @@ go 1.24.0
 
 require (
 	github.com/hibiken/asynq v0.26.0
-	github.com/hibiken/asynq/x v0.0.0-20260203063626-d704b68a426d
 	github.com/prometheus/client_golang v1.23.2
 	github.com/redis/go-redis/v9 v9.17.3
 	github.com/zeromicro/go-zero v1.10.0

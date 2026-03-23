@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/hibiken/asynq/x/metrics"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/zeromicro/go-zero/core/logx"
 )
@@ -94,9 +93,33 @@ func (c *CommonServer) buildConfig() {
 
 func (c *CommonServer) buildPrometheus() {
 	c.inspector = asynq.NewInspector(c.redisClientOpts)
-	// 2. 初始化官方采集器
-	collector := metrics.NewQueueMetricsCollector(c.inspector)
+
+	// 构建允许采集的队列白名单
+	// 设计说明：官方 metrics.NewQueueMetricsCollector 会采集 Redis 中所有队列的指标，
+	// 当多服务共用 Redis 时会导致指标混杂。此处使用自定义 collector，只采集当前服务配置的队列。
+	allowedQueues := c.buildAllowedQueues()
+	collector := NewQueueMetricsCollector(c.inspector, allowedQueues)
 	_ = prometheus.Register(collector)
+}
+
+// buildAllowedQueues 从配置中提取允许采集的队列列表
+func (c *CommonServer) buildAllowedQueues() []string {
+	// 优先使用显式配置的 Queues
+	if len(c.conf.Queues) > 0 {
+		queues := make([]string, 0, len(c.conf.Queues))
+		for queueName := range c.conf.Queues {
+			queues = append(queues, queueName)
+		}
+		return queues
+	}
+
+	// 兜底：使用 Namespace 作为默认队列名
+	if c.conf.Namespace != "" {
+		return []string{c.conf.Namespace}
+	}
+
+	// 都未配置时，使用 asynq 默认队列名
+	return []string{"default"}
 }
 
 func (c *CommonServer) ServerMux() *asynq.ServeMux {

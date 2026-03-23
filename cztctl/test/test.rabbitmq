@@ -1,0 +1,36 @@
+syntax = "v1"
+
+info (
+    title: "用户管理系统 rabbitmq"
+    desc: "提供用户消息队列消费功能"
+    version: "1.0"
+    author: "张三"
+    email: "zhangsan@example.com"
+)
+
+type (
+    OrderCreatedEvent {
+        OrderId int64 `json:"orderId"`
+        Amount float64 `json:"amount"`
+    }
+)
+
+@server (
+    tags: "订单管理"
+    summary: "订单相关消息队列消费者"
+    group: order
+    description: "订单事件的 MQ 消费者"
+    middleware: LogMiddleware
+)
+service order-mq {
+    @doc "订单创建事件消费者"
+    @handler OrderCreatedConsumer
+    order.created
+
+    @doc(
+        summary: "用户注册事件消费者"
+        description: "处理用户注册后的后续逻辑"
+    )
+    @handler UserRegisteredConsumer
+    user.registered
+}
