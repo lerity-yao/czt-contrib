@@ -55,7 +55,7 @@ cztctl/
 
 通过 `cztctl env -w CZTCTL_EXPERIMENTAL=on` 切换到手写 parser，通过 `cztctl env -w CZTCTL_EXPERIMENTAL=off` 切回 ANTLR4。
 
-`util/env/env.go` 中的 `init()` 在启动时读取 `~/.cztctl/env` 文件加载配置，`WriteEnv()` 负责持久化。env 管理使用轻量级的 `orderedEnv`（有序 map），不依赖 `tools/cztctl/pkg/collection/sortedmap`。
+`util/env/env.go` 中的 `init()` 在启动时读取 `~/.cztctl/env` 文件加载配置，`WriteEnv()` 负责持久化。env 管理使用轻量级的 `orderedEnv`（有序 map）。
 
 两套 parser 必须共存，不能删除任何一套。
 

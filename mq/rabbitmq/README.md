@@ -27,7 +27,7 @@ go get github.com/lerity-yao/czt-contrib/mq/rabbitmq
 
 也可以自定义服务端代码生成模板
 
-请参考 [cztctl](https://github.com/lerity-yao/czt-contrib/cztctl)
+请参考 [cztctl](https://github.com/lerity-yao/czt-contrib/blob/main/cztctl/README.md)
 
 ## 🚀 快速开始
 

@@ -2,6 +2,10 @@
 
 go-zero 官方 goctl 的增强版代码生成工具，作为独立模块发布。在保持与 goctl 兼容的基础上，扩展了 Swagger 文档生成、RabbitMQ 消费者服务生成、分布式定时任务服务生成等能力。
 
+cztctl 语法高亮插件 [cztctl-intellij](https://github.com/lerity-yao/cztctl-intellij)
+
+插件进入 goland 插件市场搜索 cztctl，安装即可使用
+
 ## 安装
 
 ```bash
@@ -81,7 +85,7 @@ cztctl api swagger -api user.api -dir . -filename user-api.json
 
 ## api cron
 
-从 `.cron` 文件生成基于 [czt-contrib/cron](https://github.com/lerity-yao/czt-contrib/cron) 分布式定时任务框架的定时任务服务。支持内部定时任务（`@cron`）和外部触发任务两种模式。
+从 `.cron` 文件生成基于 [czt-contrib/cron](https://github.com/lerity-yao/czt-contrib/tree/main/cron) 分布式定时任务框架的定时任务服务。支持内部定时任务（`@cron`）和外部触发任务两种模式。
 
 ```bash
 cztctl api cron -api task.cron -dir ./output
@@ -280,7 +284,7 @@ service userCron {
 
 ## api rabbitmq
 
-从 `.rabbitmq` 文件生成基于 [czt-contrib/mq/rabbitmq](https://github.com/lerity-yao/czt-contrib/mq/rabbitmq) 分布式 RabbitMQ 消费者服务框架的 RabbitMQ 消费者服务。
+从 `.rabbitmq` 文件生成基于 [czt-contrib/mq/rabbitmq](https://github.com/lerity-yao/czt-contrib/tree/main/mq/rabbitmq) 分布式 RabbitMQ 消费者服务框架的 RabbitMQ 消费者服务。
 
 ```bash
 cztctl api rabbitmq -api order.rabbitmq -dir ./output
