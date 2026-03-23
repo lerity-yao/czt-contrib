@@ -86,35 +86,53 @@ func (c *CommonClient) buildTask(ctx context.Context, taskType string, payload [
 
 // push 核心推送逻辑，处理埋点和入队
 // 默认不重试（MaxRetry=0），用户可通过 opts 覆盖
-func (c *CommonClient) push(ctx context.Context, taskType string, payload []byte, opts ...asynq.Option) (info *asynq.TaskInfo, err error) {
+func (c *CommonClient) push(ctx context.Context, taskType string, payload []byte, pushType string, opts ...asynq.Option) (info *asynq.TaskInfo, err error) {
 	ctx, span := StartProducerSpan(ctx, taskType)
 	defer func() {
 		EndSpan(span, err)
 	}()
 
+	start := time.Now()
+	payloadSize := len(payload)
+
 	// 默认不重试，用户传入的 opts 放在后面可覆盖
 	finalOpts := append([]asynq.Option{asynq.MaxRetry(0)}, opts...)
 	task := c.buildTask(ctx, taskType, payload)
 	info, err = c.client.EnqueueContext(ctx, task, finalOpts...)
-	if err == nil && info != nil {
-		span.SetAttributes(attribute.String("messaging.message_id", info.ID))
+
+	// 记录投递耗时
+	durationMs := time.Since(start).Milliseconds()
+	MetricClientPushDuration.Observe(durationMs, taskType)
+
+	// 记录投递字节数
+	MetricClientPushBytes.Add(float64(payloadSize), taskType)
+
+	// 记录投递结果
+	if err != nil {
+		MetricClientPushTotal.Inc(taskType, pushType, "fail")
+	} else {
+		MetricClientPushTotal.Inc(taskType, pushType, "success")
+		if info != nil {
+			span.SetAttributes(attribute.String("messaging.message_id", info.ID))
+		}
 	}
+
 	return info, err
 }
 
 // Push 立即执行
 func (c *CommonClient) Push(ctx context.Context, taskType string, payload []byte, opts ...asynq.Option) (*asynq.TaskInfo, error) {
-	return c.push(ctx, taskType, payload, opts...)
+	return c.push(ctx, taskType, payload, "immediate", opts...)
 }
 
 // PushIn 延时执行
 func (c *CommonClient) PushIn(ctx context.Context, taskType string, payload []byte, delay time.Duration, opts ...asynq.Option) (*asynq.TaskInfo, error) {
-	return c.push(ctx, taskType, payload, append(opts, asynq.ProcessIn(delay))...)
+	return c.push(ctx, taskType, payload, "delayed", append(opts, asynq.ProcessIn(delay))...)
 }
 
 // PushAt 指定时间点执行
 func (c *CommonClient) PushAt(ctx context.Context, taskType string, payload []byte, at time.Time, opts ...asynq.Option) (*asynq.TaskInfo, error) {
-	return c.push(ctx, taskType, payload, append(opts, asynq.ProcessAt(at))...)
+	return c.push(ctx, taskType, payload, "scheduled", append(opts, asynq.ProcessAt(at))...)
 }
 
 // PushJson 立即执行
@@ -123,7 +141,7 @@ func (c *CommonClient) PushJson(ctx context.Context, taskType string, data any, 
 	if err != nil {
 		return nil, fmt.Errorf("asynq marshal error: %w", err)
 	}
-	return c.push(ctx, taskType, payload, opts...)
+	return c.push(ctx, taskType, payload, "immediate", opts...)
 }
 
 // PushInJson 延时执行
@@ -132,7 +150,7 @@ func (c *CommonClient) PushInJson(ctx context.Context, taskType string, data any
 	if err != nil {
 		return nil, fmt.Errorf("asynq marshal error: %w", err)
 	}
-	return c.push(ctx, taskType, payload, append(opts, asynq.ProcessIn(delay))...)
+	return c.push(ctx, taskType, payload, "delayed", append(opts, asynq.ProcessIn(delay))...)
 }
 
 // PushAtJson 指定时间点执行
@@ -141,7 +159,7 @@ func (c *CommonClient) PushAtJson(ctx context.Context, taskType string, data any
 	if err != nil {
 		return nil, fmt.Errorf("asynq marshal error: %w", err)
 	}
-	return c.push(ctx, taskType, payload, append(opts, asynq.ProcessAt(at))...)
+	return c.push(ctx, taskType, payload, "scheduled", append(opts, asynq.ProcessAt(at))...)
 }
 
 // CancelTask 撤回任务
@@ -155,9 +173,10 @@ func (c *CommonClient) CancelTask(queue, taskID string) error {
 	// DeleteTask 会从所有等待队列中尝试删除该 ID
 	err := c.inspector.DeleteTask(queue, taskID)
 	if err != nil {
-		// 如果任务已经开始执行(Active)或已完成，删除会报错
+		MetricClientCancelTotal.Inc(taskID, "fail")
 		return fmt.Errorf("asynq cancel task [%s] failed: %w", taskID, err)
 	}
+	MetricClientCancelTotal.Inc(taskID, "success")
 	return nil
 }
 

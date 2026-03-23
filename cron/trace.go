@@ -14,8 +14,8 @@ import (
 
 const (
 	instrumentationName = "github.com/lerity-yao/czt-contrib/cron"
-	producerSpanName    = "asynq-producer"
-	consumerSpanName    = "asynq-consumer"
+	producerSpanName    = "cron-producer"
+	consumerSpanName    = "cron-consumer"
 )
 
 // StartProducerSpan 开启生产者 Span (Client 端使用)
@@ -29,7 +29,7 @@ func StartProducerSpan(ctx context.Context, taskType string) (context.Context, o
 	)
 
 	span.SetAttributes(
-		attribute.String("messaging.system", "asynq"),
+		attribute.String("messaging.system", "cron"),
 		attribute.String("messaging.destination", taskType),
 		attribute.String("messaging.operation", "send"),
 	)
@@ -51,7 +51,7 @@ func StartConsumerSpan(ctx context.Context, t *asynq.Task) (context.Context, ote
 	)
 
 	span.SetAttributes(
-		attribute.String("messaging.system", "asynq"),
+		attribute.String("messaging.system", "cron"),
 		attribute.String("messaging.destination", t.Type()),
 		attribute.String("messaging.operation", "process"),
 	)

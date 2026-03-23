@@ -58,6 +58,11 @@ func NewServer(conf ServerConfig, opts ...ServerOption) (Server, error) {
 	s.Scheduler = asynq.NewScheduler(s.redisClientOpts, &asynq.SchedulerOpts{
 		Location: time.Local,
 		Logger:   s.config.Logger,
+		PostEnqueueFunc: func(info *asynq.TaskInfo, err error) {
+			if err == nil {
+				MetricSchedulerTriggerTotal.Inc(info.Type)
+			}
+		},
 	})
 	s.Server = asynq.NewServer(s.redisClientOpts, s.config)
 	s.Mux = asynq.NewServeMux()
@@ -146,7 +151,7 @@ func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
 
 	// 注册到原生的 Mux
 	c.Mux.HandleFunc(realPattern, asynqHandler)
-	logx.Infof("[ASYNQ] Task registered, waiting for dispatch: %s", realPattern)
+	logx.Infof("[CRON] Task registered, waiting for dispatch: %s", realPattern)
 
 }
 
@@ -161,10 +166,12 @@ func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option
 	task := asynq.NewTask(realPattern, nil, finalOpts...)
 	entryID, err := c.Scheduler.Register(spec, task, finalOpts...)
 	if err != nil {
-		logx.Errorf("[ASYNQ] Cron job registration failed: type=%s, spec=%s, err=%v", realPattern, spec, err)
+		logx.Errorf("[CRON] Cron job registration failed: type=%s, spec=%s, err=%v", realPattern, spec, err)
+	} else {
+		MetricSchedulerRegistered.Inc()
 	}
 
-	logx.Infof("[ASYNQ] Cron job registered: [%s] -> %s (EntryID: %s)", spec, realPattern, entryID)
+	logx.Infof("[CRON] Cron job registered: [%s] -> %s (EntryID: %s)", spec, realPattern, entryID)
 	return entryID
 }
 

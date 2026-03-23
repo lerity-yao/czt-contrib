@@ -5,9 +5,145 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/zeromicro/go-zero/core/metric"
 )
 
 const metricsNamespace = "cron"
+
+// ==================== Server 端指标（中间件采集，零侵入） ====================
+
+const serverSubsystem = "server"
+
+var (
+	// MetricServerConsumeTotal 消费计数（成功/失败/skip_retry）
+	MetricServerConsumeTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "consume_total",
+		Help:      "消费计数",
+		Labels:    []string{"task_type", "status"},
+	})
+
+	// MetricServerConsumeDuration 消费耗时
+	MetricServerConsumeDuration = metric.NewHistogramVec(&metric.HistogramVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "consume_duration_ms",
+		Help:      "消费耗时统计(ms)",
+		Labels:    []string{"task_type"},
+		Buckets:   []float64{5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000},
+	})
+
+	// MetricServerConsumeBytes 消费字节数
+	MetricServerConsumeBytes = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "consume_bytes",
+		Help:      "消费字节数",
+		Labels:    []string{"task_type"},
+	})
+
+	// MetricServerActiveWorkers 当前并发数
+	MetricServerActiveWorkers = metric.NewGaugeVec(&metric.GaugeVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "active_workers",
+		Help:      "当前正在执行的任务并发数",
+		Labels:    []string{"task_type"},
+	})
+
+	// MetricServerRetryTotal 重试次数（非首次执行）
+	MetricServerRetryTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "retry_total",
+		Help:      "重试执行次数（非首次执行）",
+		Labels:    []string{"task_type"},
+	})
+
+	// MetricServerSkipRetryTotal 跳过重试次数（主动放弃）
+	MetricServerSkipRetryTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "skip_retry_total",
+		Help:      "跳过重试次数（主动放弃）",
+		Labels:    []string{"task_type"},
+	})
+
+	// MetricServerPanicTotal panic 次数
+	MetricServerPanicTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "panic_total",
+		Help:      "panic 次数",
+		Labels:    []string{"task_type"},
+	})
+)
+
+var (
+	// MetricSchedulerTriggerTotal 定时任务触发次数
+	MetricSchedulerTriggerTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "scheduler_trigger_total",
+		Help:      "定时任务触发次数",
+		Labels:    []string{"task_type"},
+	})
+
+	// MetricSchedulerRegistered 当前注册的定时任务数
+	MetricSchedulerRegistered = metric.NewGaugeVec(&metric.GaugeVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: serverSubsystem,
+		Name:      "scheduler_registered",
+		Help:      "当前注册的定时任务数",
+		Labels:    []string{},
+	})
+)
+
+// ==================== Client 端指标 ====================
+
+const clientSubsystem = "client"
+
+var (
+	// MetricClientPushTotal 投递计数
+	MetricClientPushTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: clientSubsystem,
+		Name:      "push_total",
+		Help:      "投递计数",
+		Labels:    []string{"task_type", "push_type", "status"},
+	})
+
+	// MetricClientPushDuration 投递耗时
+	MetricClientPushDuration = metric.NewHistogramVec(&metric.HistogramVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: clientSubsystem,
+		Name:      "push_duration_ms",
+		Help:      "投递耗时统计(ms)",
+		Labels:    []string{"task_type"},
+		Buckets:   []float64{1, 2, 5, 10, 25, 50, 100, 250, 500},
+	})
+
+	// MetricClientPushBytes 投递字节数
+	MetricClientPushBytes = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: clientSubsystem,
+		Name:      "push_bytes",
+		Help:      "投递字节数",
+		Labels:    []string{"task_type"},
+	})
+
+	// MetricClientCancelTotal 撤销任务计数
+	MetricClientCancelTotal = metric.NewCounterVec(&metric.CounterVecOpts{
+		Namespace: metricsNamespace,
+		Subsystem: clientSubsystem,
+		Name:      "cancel_total",
+		Help:      "撤销任务计数",
+		Labels:    []string{"task_type", "status"},
+	})
+)
+
+// ==================== 队列状态指标（Collector 采集，零侵入） ====================
 
 // QueueMetricsCollector 带队列过滤的指标采集器
 // 只采集 allowedQueues 中配置的队列指标，解决多服务共用 Redis 时指标混杂问题
@@ -19,44 +155,56 @@ type QueueMetricsCollector struct {
 // Descriptors - 与官方 collector 保持一致的指标定义
 var (
 	tasksQueuedDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "tasks_enqueued_total"),
-		"Number of tasks enqueued; broken down by queue and state.",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "tasks_enqueued_total"),
+		"各状态任务数量",
 		[]string{"queue", "state"}, nil,
 	)
 
 	queueSizeDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "queue_size"),
-		"Number of tasks in a queue",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "queue_size"),
+		"队列任务总数",
 		[]string{"queue"}, nil,
 	)
 
 	queueLatencyDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "queue_latency_seconds"),
-		"Number of seconds the oldest pending task is waiting in pending state to be processed.",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "queue_latency_seconds"),
+		"队列延迟（最旧 pending 任务等待时间）",
 		[]string{"queue"}, nil,
 	)
 
 	queueMemUsgDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "queue_memory_usage_approx_bytes"),
-		"Number of memory used by a given queue (approximated number by sampling).",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "queue_memory_usage_approx_bytes"),
+		"队列内存占用（采样估算值）",
 		[]string{"queue"}, nil,
 	)
 
 	tasksProcessedTotalDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "tasks_processed_total"),
-		"Number of tasks processed (both succeeded and failed); broken down by queue",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "tasks_processed_total"),
+		"已处理任务总数（含成功和失败）",
 		[]string{"queue"}, nil,
 	)
 
 	tasksFailedTotalDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "tasks_failed_total"),
-		"Number of tasks failed; broken down by queue",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "tasks_failed_total"),
+		"失败任务总数",
 		[]string{"queue"}, nil,
 	)
 
 	pausedQueuesDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(metricsNamespace, "", "queue_paused_total"),
-		"Number of queues paused",
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "queue_paused_total"),
+		"队列暂停状态",
+		[]string{"queue"}, nil,
+	)
+
+	queueGroupsDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "queue_groups"),
+		"聚合组数量",
+		[]string{"queue"}, nil,
+	)
+
+	tasksAggregatingDesc = prometheus.NewDesc(
+		prometheus.BuildFQName(metricsNamespace, serverSubsystem, "tasks_aggregating_total"),
+		"聚合中的任务数",
 		[]string{"queue"}, nil,
 	)
 )
@@ -89,7 +237,7 @@ func (c *QueueMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 func (c *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	queueInfos, err := c.collectQueueInfo()
 	if err != nil {
-		log.Printf("[ASYNQ_METRICS] Failed to collect metrics: %v", err)
+		log.Printf("[CRON_METRICS] Failed to collect metrics: %v", err)
 		return
 	}
 
@@ -115,6 +263,10 @@ func (c *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			pausedValue = 1
 		}
 		ch <- prometheus.MustNewConstMetric(pausedQueuesDesc, prometheus.GaugeValue, float64(pausedValue), info.Queue)
+
+		// 聚合相关指标
+		ch <- prometheus.MustNewConstMetric(queueGroupsDesc, prometheus.GaugeValue, float64(info.Groups), info.Queue)
+		ch <- prometheus.MustNewConstMetric(tasksAggregatingDesc, prometheus.GaugeValue, float64(info.Aggregating), info.Queue)
 	}
 }
 
@@ -130,7 +282,7 @@ func (c *QueueMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error) {
 		qinfo, err := c.inspector.GetQueueInfo(queueName)
 		if err != nil {
 			// 队列不存在时跳过，不中断采集
-			log.Printf("[ASYNQ_METRICS] Failed to get queue info for %s: %v", queueName, err)
+			log.Printf("[CRON_METRICS] Failed to get queue info for %s: %v", queueName, err)
 			continue
 		}
 		infos = append(infos, qinfo)

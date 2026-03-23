@@ -140,16 +140,55 @@ Client 提供了多种任务进入 Redis 的姿势。
 
 ## 监控指标
 
-Asynq的监控被并入了go-zero的监控体系中，
+监控指标已并入 go-zero 的 Prometheus 体系，通过 `/metrics` 端点暴露。
 
-在 Asynq 的 基础上，增加了
+### Server 端指标 (`cron_server_`)
 
-- cron_consume_total: 消费总数统计
-- cron_consume_duration_ms: 消费耗时统计(ms)
-- cron_active_workers: 当前正在执行的任务并发数
+#### 任务处理指标（Interceptor 采集）
 
-注意：这些指标需要在 go-zero 项目中开启 Prometheus 监控功能。默认情况下，go-zero 会在 `/metrics` 路径暴露 Prometheus 指标。
-你也可以使用 asynq 的 Asynqmon 来查看健康指标，但是不包括自定义的 cron 指标
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `cron_server_consume_total` | Counter | task_type, status | 消费计数（status: success/fail/skip_retry） |
+| `cron_server_consume_duration_ms` | Histogram | task_type | 消费耗时 |
+| `cron_server_consume_bytes` | Counter | task_type | 消费字节数 |
+| `cron_server_active_workers` | Gauge | task_type | 当前并发数 |
+| `cron_server_retry_total` | Counter | task_type | 重试执行次数 |
+| `cron_server_skip_retry_total` | Counter | task_type | 跳过重试次数 |
+| `cron_server_panic_total` | Counter | task_type | panic 次数（panic 不重试） |
+
+#### Scheduler 指标
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `cron_server_scheduler_trigger_total` | Counter | task_type | 定时任务触发次数 |
+| `cron_server_scheduler_registered` | Gauge | - | 当前注册的定时任务数 |
+
+#### 队列状态指标（Collector 采集）
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `cron_server_tasks_enqueued_total` | Gauge | queue, state | 各状态任务数（state: active/pending/scheduled/retry/archived/completed） |
+| `cron_server_queue_size` | Gauge | queue | 队列任务总数 |
+| `cron_server_queue_latency_seconds` | Gauge | queue | 队列延迟（最旧 pending 任务等待时间） |
+| `cron_server_queue_memory_usage_approx_bytes` | Gauge | queue | 队列内存占用（采样估算值） |
+| `cron_server_tasks_processed_total` | Counter | queue | 已处理任务总数（含成功和失败） |
+| `cron_server_tasks_failed_total` | Counter | queue | 失败任务总数 |
+| `cron_server_queue_paused_total` | Gauge | queue | 队列暂停状态 |
+| `cron_server_queue_groups` | Gauge | queue | 聚合组数量 |
+| `cron_server_tasks_aggregating_total` | Gauge | queue | 聚合中的任务数 |
+
+> 队列状态指标通过自定义 `QueueMetricsCollector` 采集，支持队列白名单过滤，解决多服务共用 Redis 时指标混杂问题。
+
+### Client 端指标 (`cron_client_`)
+
+| 指标 | 类型 | 标签 | 说明 |
+|------|------|------|------|
+| `cron_client_push_total` | Counter | task_type, push_type, status | 投递计数（push_type: immediate/delayed/scheduled） |
+| `cron_client_push_duration_ms` | Histogram | task_type | 投递耗时 |
+| `cron_client_push_bytes` | Counter | task_type | 投递字节数 |
+| `cron_client_cancel_total` | Counter | task_type, status | 撤销任务计数 |
+
+注意：这些指标需要在 go-zero 项目中开启 Prometheus 监控功能。
 
 ## 日志
 
