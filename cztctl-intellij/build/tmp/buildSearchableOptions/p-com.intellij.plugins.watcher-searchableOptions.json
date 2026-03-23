@@ -1,2 +1,0 @@
-{"id":"preferences.keymap","name":"|b|messages.KeyMapBundle|k|keymap.display.name|","entries":[{"hit":"|b|messages.BackgroundTaskBundle|k|action.FileWatcher.runForFiles.description|","path":"ActionManager"},{"hit":"|b|messages.BackgroundTaskBundle|k|action.FileWatcher.runForFiles.text|","path":"ActionManager"}]}
-{"id":"watcher.settings","name":"|b|messages.BackgroundTaskBundle|k|settings.name|","entries":[{"hit":"|b|messages.BackgroundTaskBundle|k|settings.page.comment|"},{"hit":"|b|messages.BackgroundTaskBundle|k|settings.name|"}]}

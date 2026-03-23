@@ -85,14 +85,17 @@ func (c *CommonClient) buildTask(ctx context.Context, taskType string, payload [
 }
 
 // push 核心推送逻辑，处理埋点和入队
+// 默认不重试（MaxRetry=0），用户可通过 opts 覆盖
 func (c *CommonClient) push(ctx context.Context, taskType string, payload []byte, opts ...asynq.Option) (info *asynq.TaskInfo, err error) {
 	ctx, span := StartProducerSpan(ctx, taskType)
 	defer func() {
 		EndSpan(span, err)
 	}()
 
+	// 默认不重试，用户传入的 opts 放在后面可覆盖
+	finalOpts := append([]asynq.Option{asynq.MaxRetry(0)}, opts...)
 	task := c.buildTask(ctx, taskType, payload)
-	info, err = c.client.EnqueueContext(ctx, task, opts...)
+	info, err = c.client.EnqueueContext(ctx, task, finalOpts...)
 	if err == nil && info != nil {
 		span.SetAttributes(attribute.String("messaging.message_id", info.ID))
 	}
