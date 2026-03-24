@@ -163,7 +163,7 @@ func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option
 		realPattern = fmt.Sprintf("%s:%s", c.conf.Namespace, pattern)
 		finalOpts = append(opts, asynq.Queue(c.conf.Namespace))
 	}
-	task := asynq.NewTask(realPattern, nil, finalOpts...)
+	task := asynq.NewTask(realPattern, nil)
 	entryID, err := c.Scheduler.Register(spec, task, finalOpts...)
 	if err != nil {
 		logx.Errorf("[CRON] Cron job registration failed: type=%s, spec=%s, err=%v", realPattern, spec, err)
