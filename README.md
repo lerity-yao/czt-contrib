@@ -32,8 +32,8 @@ czt-contrib/
 基于 goctl 魔改的代码生成工具，专为 czt-contrib 组件库设计，支持一键生成 RabbitMQ 消费者服务、Cron 定时任务服务、Swagger 文档等。
 
 **核心能力**：
-- `cztctl api rabbitmq` - 根据 .api 文件生成 RabbitMQ 消费者服务代码
-- `cztctl api cron` - 根据 .api 文件生成 Cron 定时任务服务代码
+- `cztctl api rabbitmq` - 根据 .rabbitmq 文件生成 RabbitMQ 消费者服务代码
+- `cztctl api cron` - 根据 .cron 文件生成 Cron 定时任务服务代码
 - `cztctl api swagger` - 根据 .api 文件生成 Swagger API 文档
 - 支持自定义模板，可根据团队规范定制生成代码风格
 - 生成代码自动集成链路追踪、监控指标、错误处理等能力
