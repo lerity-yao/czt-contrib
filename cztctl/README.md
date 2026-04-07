@@ -220,6 +220,17 @@ type (
 | `@handler` | **是** | 任务名称，即 asynq task type |
 | 路由行 | **是** | 任务标识，可选带请求参数 `TaskName(ReqType)` |
 
+**路由名规则：**
+
+路由名由标识符（字母、数字、下划线、`$`）组成，支持 `-`（横杠）和 `:`（冒号）作为分隔符：
+
+```
+CleanUserTask           // 纯标识符
+sync-order              // 横杠分隔
+email:send              // 冒号分隔
+data-sync:daily         // 混合分隔
+```
+
 **@doc 两种写法：**
 
 ```
@@ -315,12 +326,13 @@ cztctl api rabbitmq -api order.rabbitmq -dir ./output
 
 **队列名称规则：**
 
-路由行为点分隔的标识符，对应 RabbitMQ 的队列名称：
+路由名由标识符（字母、数字、下划线、`$`）组成，支持 `.`（点号）和 `-`（横杠）作为分隔符，对应 RabbitMQ 的队列名称：
 
 ```
-order.created           // 两段
-user.registered         // 两段
-payment.refund.success  // 三段
+order.created           // 点号分隔
+payment.refund.success  // 多段点号
+payment-refund          // 横杠分隔
+order.pay-callback      // 混合分隔
 ```
 
 **完整示例：**
@@ -379,7 +391,8 @@ service order-mq {
 | @cronRetry | 支持 | 不支持 |
 | @handler | task type 名称 | 消费者名称 |
 | 路由行格式 | `TaskName[(ReqType)]` | `queue.name[(MsgType)]` |
-| 路由行命名 | 驼峰标识符 | 点分隔队列名 |
+| 路由名分隔符 | `-`（横杠）、`:`（冒号） | `.`（点号）、`-`（横杠） |
+| 路由行命名 | 标识符，支持横杠/冒号分隔 | 标识符，支持点号/横杠分隔 |
 
 ## 远程模板
 

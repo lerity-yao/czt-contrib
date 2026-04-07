@@ -82,10 +82,11 @@ atCron:         ATCRON STRING;
 atCronRetry:    ATCRONRETRY INT;
 
 // route：统一格式 routeName [(body)]
-// .cron   — routeName = TaskName (单个 ID)
-// .rabbitmq — routeName = queue.name (dot-separated IDs)
+// .cron   — routeName = ID (('-' | ':') ID)*  支持 sync-order、email:send
+// .rabbitmq — routeName = ID (('.' | '-') ID)*  支持 order.created、order-created
+// 语法层接受超集 (. | - | :)，语义层按文件后缀校验合法分隔符
 route:          routeName request=body?;
-routeName:      ID ('.' ID)*;
+routeName:      ID (('.' | '-' | ':') ID)*;
 body:           lp='(' ID? rp=')';
 
 // ==================== kv ====================

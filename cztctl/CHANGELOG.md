@@ -2,6 +2,14 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.3] - 2026-04-07
+
+### 新增
+
+- .cron 路由名支持 `-`（横杠）和 `:`（冒号）分隔符，如 `sync-order`、`email:send`
+- .rabbitmq 路由名支持 `-`（横杠）分隔符，如 `payment-refund`、`order.pay-callback`
+- 路由名分隔符按文件类型语义隔离：.cron 仅允许 `-` `:`，.rabbitmq 仅允许 `.` `-`
+
 ## [1.10.2] - 2026-03-22
 
 ### 新增

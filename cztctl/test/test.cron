@@ -42,4 +42,15 @@ service userCron {
     @doc "外部触发任务"
     @handler SendEmailJob
     SendEmailTask(DemoAReq)
+
+    // 横杠分隔路由名
+    @doc "同步订单数据"
+    @cron "0 */5 * * *"
+    @handler SyncOrderJob
+    sync-order(DemoAReq)
+
+    // 冒号分隔路由名
+    @doc "发送邮件通知"
+    @handler EmailSendJob
+    email:send
 }

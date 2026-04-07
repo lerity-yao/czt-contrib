@@ -3,7 +3,7 @@ package version
 import "runtime/debug"
 
 const (
-	BuildVersion = "1.10.2"
+	BuildVersion = "1.10.3"
 )
 
 // GetGoctlVersion returns BuildVersion

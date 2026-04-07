@@ -14,6 +14,12 @@ import (
 	"github.com/lerity-yao/czt-contrib/cztctl/util/env"
 )
 
+// cronRouteSeparators defines legal separators for .cron routeName: - :
+var cronRouteSeparators = map[rune]bool{'-': true, ':': true}
+
+// rabbitmqRouteSeparators defines legal separators for .rabbitmq routeName: . -
+var rabbitmqRouteSeparators = map[rune]bool{'.': true, '-': true}
+
 type parser struct {
 	ast  *ast.Api
 	spec *spec.ApiSpec
@@ -260,6 +266,21 @@ func (p parser) fillService(filename string) error {
 			} else {
 				// .rabbitmq: routeName is the queue name
 				route.Queue = astRoute.Route.RouteName.Text()
+			}
+
+			// Validate routeName separators by file type
+			allowedSeps := rabbitmqRouteSeparators
+			fileType := ".rabbitmq"
+			if isCron {
+				allowedSeps = cronRouteSeparators
+				fileType = ".cron"
+			}
+			for _, ch := range route.Method {
+				if !unicode.IsLetter(ch) && !unicode.IsDigit(ch) && ch != '_' && ch != '$' {
+					if !allowedSeps[ch] {
+						return fmt.Errorf("route [%s] contains illegal separator '%c' for %s file", route.Method, ch, fileType)
+					}
+				}
 			}
 
 			err := p.fillRouteType(&route)

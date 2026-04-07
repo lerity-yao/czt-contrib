@@ -245,8 +245,8 @@ func (p *Parser) parseServiceItemStmt() *ast.ServiceItemStmt {
 }
 
 // parseExtensionRoute parses the extension route:
-// cron: IDENT [(IDENT)]
-// rabbitmq: IDENT [.IDENT]*
+// cron:     IDENT (('-' | ':') IDENT)*   e.g. sync-order, email:send
+// rabbitmq: IDENT (('.' | '-') IDENT)*   e.g. order.created, order-created
 func (p *Parser) parseExtensionRoute() *ast.RouteStmt {
 	var stmt = &ast.RouteStmt{}
 
@@ -259,12 +259,24 @@ func (p *Parser) parseExtensionRoute() *ast.RouteStmt {
 	namePos := p.curTok.Position
 
 	if p.mode == ParseModeRabbitMQ {
-		// rabbitmq: allow dot-separated queue names like order.created
-		for p.peekTokenIs(token.DOT) {
-			if !p.nextToken() { // consume DOT
+		// rabbitmq: allow '.' and '-' separated queue names like order.created, order-created
+		for p.peekTokenIs(token.DOT) || p.peekTokenIs(token.SUB) {
+			if !p.nextToken() { // consume separator
 				return nil
 			}
-			nameText += "."
+			nameText += p.curTok.Text
+			if !p.advanceIfPeekTokenIs(token.IDENT) {
+				return nil
+			}
+			nameText += p.curTok.Text
+		}
+	} else {
+		// cron: allow '-' and ':' separated task names like sync-order, email:send
+		for p.peekTokenIs(token.SUB) || p.peekTokenIs(token.COLON) {
+			if !p.nextToken() { // consume separator
+				return nil
+			}
+			nameText += p.curTok.Text
 			if !p.advanceIfPeekTokenIs(token.IDENT) {
 				return nil
 			}

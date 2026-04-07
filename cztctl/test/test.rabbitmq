@@ -33,4 +33,14 @@ service order-mq {
     )
     @handler UserRegisteredConsumer
     user.registered
+
+    // 横杠分隔队列名
+    @doc "支付退款事件消费者"
+    @handler PaymentRefundConsumer
+    payment-refund
+
+    // 混合分隔符
+    @doc "订单支付回调"
+    @handler OrderPayCallbackConsumer
+    order.pay-callback(OrderCreatedEvent)
 }

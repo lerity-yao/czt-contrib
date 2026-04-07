@@ -147,6 +147,7 @@ cd api/parser/g4
 rm -f gen/cztctl/cztctlparser_*.go
 
 # 生成（-o 指定输出目录，-package 指定包名）
+# 如果没有 antlr-4.7.2-complete.jar，需要先下载
 java -jar /path/to/antlr-4.7.2-complete.jar \
   -Dlanguage=Go -visitor \
   -o gen/cztctl -package cztctl \
