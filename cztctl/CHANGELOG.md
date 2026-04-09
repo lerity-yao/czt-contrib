@@ -2,13 +2,19 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## [1.10.4] - 2026-04-09
+## [1.10.5] - 2026-04-09
 
 ### 修复
 
 - 修复 `cztctl api cron` 生成 workers.go 时，`CronAdd` 错误包含 handler 参数的问题
   - 定时任务（`@cron`）现在正确生成两行：先 `Add(pattern, handler)` 注册处理函数，再 `CronAdd(cronExpr, pattern, opts...)` 注册定时调度
   - 纯异步任务（无 `@cron`）仍只生成 `Add(pattern, handler)`
+- 修复 go.sum 中 goctl 校验和不匹配导致 `go install` 失败的问题
+
+### 变更
+
+- 升级 goctl 依赖 v1.10.0 → v1.10.1
+- 升级 go-zero 依赖 v1.10.0 → v1.10.1
 
 ## [1.10.3] - 2026-04-07
 
