@@ -101,18 +101,20 @@ func getWorkerAdditions(api *spec.ApiSpec) []string {
 				handler = strings.Title(handler)
 			}
 
-			var l string
+			addLine := fmt.Sprintf("serverCtx.CronServer.Add(\"%s\", %s.%s(serverCtx))",
+				pattern, pkgName, handler)
+			if _, ok := seen[addLine]; !ok {
+				seen[addLine] = struct{}{}
+				workerAdditionNames = append(workerAdditionNames, addLine)
+			}
 			if h.Cron != "" {
 				retry := h.CronRetry
-				l = fmt.Sprintf("serverCtx.CronServer.CronAdd(\"%s\", \"%s\", %s.%s(serverCtx), asynq.MaxRetry(%d))",
-					h.Cron, pattern, pkgName, handler, retry)
-			} else {
-				l = fmt.Sprintf("serverCtx.CronServer.Add(\"%s\", %s.%s(serverCtx))",
-					pattern, pkgName, handler)
-			}
-			if _, ok := seen[l]; !ok {
-				seen[l] = struct{}{}
-				workerAdditionNames = append(workerAdditionNames, l)
+				cronLine := fmt.Sprintf("serverCtx.CronServer.CronAdd(\"%s\", \"%s\", asynq.MaxRetry(%d))",
+					h.Cron, pattern, retry)
+				if _, ok := seen[cronLine]; !ok {
+					seen[cronLine] = struct{}{}
+					workerAdditionNames = append(workerAdditionNames, cronLine)
+				}
 			}
 		}
 	}
