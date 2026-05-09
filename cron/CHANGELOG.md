@@ -2,6 +2,13 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## v0.0.6
+
+### 变更
+- `metrics.go` 中 `log.Printf` 替换为 `logx.Errorf`，统一使用 go-zero 日志规范
+- 移除 `LoggingMiddleware`，避免与 asynq 内部错误日志重复
+- 移除 `RecoveryMiddleware` 中冗余的 `logc.Errorf`，asynq `perform` 已内置 panic recovery 日志
+
 ## v0.0.5
 
 ### 新增

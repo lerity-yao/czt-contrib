@@ -69,7 +69,6 @@ func NewServer(conf ServerConfig, opts ...ServerOption) (Server, error) {
 	s.Mux.Use(RecoveryMiddleware)
 	s.Mux.Use(PrometheusMiddleware)
 	s.Mux.Use(TraceMiddleware)
-	s.Mux.Use(LoggingMiddleware)
 	return s, nil
 }
 

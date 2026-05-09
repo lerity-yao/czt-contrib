@@ -17,7 +17,7 @@ func (l *AsynqLogger) Info(args ...interface{}) {
 }
 
 func (l *AsynqLogger) Warn(args ...interface{}) {
-	logx.Infof(" %v", fmt.Sprint(args...))
+	logx.Infof("%v", fmt.Sprint(args...))
 }
 
 func (l *AsynqLogger) Error(args ...interface{}) {

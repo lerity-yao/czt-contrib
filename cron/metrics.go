@@ -1,10 +1,9 @@
 package cron
 
 import (
-	"log"
-
 	"github.com/hibiken/asynq"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/core/metric"
 )
 
@@ -237,7 +236,7 @@ func (c *QueueMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 func (c *QueueMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	queueInfos, err := c.collectQueueInfo()
 	if err != nil {
-		log.Printf("[CRON_METRICS] Failed to collect metrics: %v", err)
+		logx.Errorf("[CRON_METRICS] Failed to collect metrics: %v", err)
 		return
 	}
 
@@ -282,7 +281,7 @@ func (c *QueueMetricsCollector) collectQueueInfo() ([]*asynq.QueueInfo, error) {
 		qinfo, err := c.inspector.GetQueueInfo(queueName)
 		if err != nil {
 			// 队列不存在时跳过，不中断采集
-			log.Printf("[CRON_METRICS] Failed to get queue info for %s: %v", queueName, err)
+			logx.Errorf("[CRON_METRICS] Failed to get queue info for %s: %v", queueName, err)
 			continue
 		}
 		infos = append(infos, qinfo)

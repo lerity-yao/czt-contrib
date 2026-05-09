@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime/debug"
 	"time"
 
 	"github.com/hibiken/asynq"
-	"github.com/zeromicro/go-zero/core/logc"
 )
 
 // RecoveryMiddleware 中间件
@@ -16,7 +14,6 @@ func RecoveryMiddleware(next asynq.Handler) asynq.Handler {
 	return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) (err error) {
 		defer func() {
 			if r := recover(); r != nil {
-				logc.Errorf(ctx, "[CRON_PANIC] type: %s, panic: %v\n%s", t.Type(), r, debug.Stack())
 				// 记录 panic 指标
 				MetricServerPanicTotal.Inc(t.Type())
 				// panic 不重试
@@ -35,17 +32,6 @@ func TraceMiddleware(next asynq.Handler) asynq.Handler {
 			EndSpan(span, err)
 		}()
 		return next.ProcessTask(childCtx, t)
-	})
-}
-
-// LoggingMiddleware 中间件
-func LoggingMiddleware(next asynq.Handler) asynq.Handler {
-	return asynq.HandlerFunc(func(ctx context.Context, t *asynq.Task) error {
-		err := next.ProcessTask(ctx, t)
-		if err != nil {
-			logc.Errorf(ctx, "[CRON_ERROR] type: %s, err: %v, payload: %s", t.Type(), err, string(t.Payload()))
-		}
-		return err
 	})
 }
 
