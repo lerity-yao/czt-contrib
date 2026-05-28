@@ -2,6 +2,23 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.6] - 2026-05-27
+
+### 新增
+
+- `cztctl rpc sdk` — 将 RPC 客户端代码自动生成为独立 Go 模块并发布到 Git 仓库
+  - 自动克隆/初始化 SDK 仓库，支持 HTTPS + Token 认证
+  - 递归解析 proto import 依赖，自动复制所有相关 proto 文件
+  - 调用 goctl 生成客户端代码，清理服务端代码仅保留 client/
+  - 自动执行 `go mod tidy` 整理依赖
+  - SemVer 版本号管理：自动递增 patch，patch 到 99 自动进位 minor
+  - Git 自动提交、打标签、推送（分支 + 标签）
+  - 支持 `--remote` / `--branch` goctl 远程模板透传
+  - 支持 `--multiple` 多服务模式
+  - 支持 `--goproxy` 自定义代理
+  - 支持 `--repo-branch` 指定 SDK 仓库分支（默认 main）
+  - goctl 版本前置检查（未安装为硬错误，版本低为软警告）
+
 ## [1.10.5] - 2026-04-09
 
 ### 修复

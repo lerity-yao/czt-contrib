@@ -13,6 +13,7 @@ import (
 	"github.com/lerity-yao/czt-contrib/cztctl/env"
 	"github.com/lerity-yao/czt-contrib/cztctl/internal/cobrax"
 	"github.com/lerity-yao/czt-contrib/cztctl/internal/version"
+	"github.com/lerity-yao/czt-contrib/cztctl/rpc"
 	"github.com/spf13/cobra"
 	cobracompletefig "github.com/withfig/autocomplete-tools/integrations/cobra"
 )
@@ -101,9 +102,11 @@ func init() {
 		"%s %s/%s (go-zero %s)", version.BuildVersion,
 		runtime.GOOS, runtime.GOARCH, version.GetGoZeroVersion())
 
+	rootCmd.Command.SilenceErrors = true
 	rootCmd.SetUsageTemplate(usageTpl)
 	rootCmd.AddCommand(api.Cmd)
 	rootCmd.AddCommand(env.Cmd)
+	rootCmd.AddCommand(rpc.Cmd)
 	rootCmd.Command.AddCommand(cobracompletefig.CreateCompletionSpecCommand())
 	rootCmd.MustInit()
 }

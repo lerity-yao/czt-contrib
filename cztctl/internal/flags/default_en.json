@@ -39,6 +39,23 @@
         "filename": "The generated swagger file name without the extension\n生成的 swagger 文件名称，不包含后缀",
         "yaml": "Generate swagger yaml file, default to json\n生成 yaml 类型的 swagger, 默认是 json"
       }
+    },
+    "rpc": {
+      "short": "Generate RPC related files\n生成 RPC 相关文件",
+      "sdk": {
+        "short": "Generate RPC client SDK from proto file\n根据 proto 文件生成 RPC client SDK",
+        "proto": "The proto file path\nproto 文件路径",
+        "repo": "SDK repo full git URL (http:// or https://), e.g. https://gitlab.ddtz.com/backend/tax-invoice-rpc-sdk.git\nSDK 仓库完整 git URL",
+        "repo-user": "Repo auth username\n仓库认证用户名",
+        "repo-token": "Repo auth credential (password/token/key)\n仓库认证凭据",
+        "remote": "{{.global.remote}}",
+        "style": "{{.global.style}}",
+        "tag": "SDK version tag, e.g. v1.0.0\nSDK 版本号",
+        "repo-branch": "SDK repo git branch name (default: master)\nSDK 仓库 Git 分支名称",
+        "goproxy": "Go module proxy URL, e.g. https://goproxy.cn,direct\nGo module 代理地址",
+        "branch": "Remote template branch name for goctl\ngoctl 远程模板分支名称",
+        "multiple": "Enable multiple service mode (-m flag for goctl)\n启用多服务模式"
+      }
     }
   },
   "env": {

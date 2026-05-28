@@ -101,7 +101,9 @@ func (f *FlagSet) StringSliceVarWithDefaultValue(p *[]string, name string, value
 func NewCommand(use string, opts ...Option) *Command {
 	c := &Command{
 		Command: &cobra.Command{
-			Use: use,
+			Use:           use,
+			SilenceUsage:  true,
+			SilenceErrors: true,
 		},
 	}
 

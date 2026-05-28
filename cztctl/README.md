@@ -26,6 +26,7 @@ cztctl api swagger    从 .api 文件生成 Swagger 文档
 cztctl api cron       从 .cron 文件生成分布式定时任务服务
 cztctl api rabbitmq   从 .rabbitmq 文件生成 RabbitMQ 消费者服务
 cztctl env            查看或编辑 cztctl 环境变量
+cztctl rpc sdk        生成 RPC 客户端 SDK 并发布到独立 Git 仓库
 ```
 
 ## api swagger
@@ -417,6 +418,86 @@ cztctl api cron \
 | `gozero`（默认） | `servicecontext.go` |
 | `go_zero` | `service_context.go` |
 | `goZero` | `serviceContext.go` |
+
+## rpc sdk
+
+将 RPC 服务的客户端代码自动生成为独立的 Go 模块，一键推送到指定 Git 仓库。调用方通过 `go get` 引入即可调用，无需关心 proto 定义和代码生成。
+
+```bash
+cztctl rpc sdk --proto proto/order.proto --repo https://gitlab.ddtz.com/rpc-sdk/order-sdk.git
+```
+
+| 参数 | 短名 | 必填 | 默认值 | 说明 |
+|---|---|---|---|---|
+| `--proto` | - | 是 | - | proto 文件路径（相对或绝对路径均可） |
+| `--repo` | - | 是 | - | SDK 仓库完整 git URL（http:// 或 https://） |
+| `--repo-user` | - | 否 | `cztctl-bot` | 仓库认证用户名 |
+| `--repo-token` | - | 否 | 内置默认值 | 仓库认证凭据（GitLab Access Token） |
+| `--remote` | - | 否 | 空 | goctl 远程模板 git URL |
+| `--style` | - | 否 | `gozero` | 命名风格 |
+| `--tag` | - | 否 | 自动递增 | 版本号（SemVer 格式，如 v1.0.0） |
+| `--branch` | - | 否 | 空 | goctl 远程模板分支 |
+| `-m` | `--multiple` | 否 | `false` | 多服务模式， rpc 服务如果是多模式，需要传入此值 |
+| `--repo-branch` | - | 否 | `main` | SDK 仓库 Git 分支名 |
+| `--goproxy` | - | 否 | 系统默认 | Go module 代理地址，工具会执行 go mod tidy，如果网络有问题，可以传入代理 |
+
+### 工作流程
+
+1. 克隆已有 SDK 仓库（新仓库则初始化）
+2. 清理旧客户端代码
+3. 初始化 go.mod（若不存在）
+4. 递归复制 proto 文件（包含依赖 proto）
+5. 调用 goctl 生成客户端代码
+6. 清理服务端代码（仅保留 client/ 目录）
+7. `go mod tidy` 整理依赖
+8. Git 提交、打标签、推送到远程仓库
+
+### 版本号规则
+
+- 首次发布默认：`v1.0.0`
+- 后续自动递增 patch：`v1.0.0` → `v1.0.1` → `v1.0.2` → ...
+- patch 到 99 后自动进位 minor：`v1.0.99` → `v1.1.0`
+- 可通过 `--tag` 手动指定（必须大于当前最新版本）
+
+### 使用示例
+
+**最简用法：**
+
+```bash
+cztctl rpc sdk \
+  --proto proto/tax_invoice.proto \
+  --repo https://gitlab.ddtz.com/rpc-sdk/tax-invoice-sdk.git
+```
+
+**完整示例：**
+
+```bash
+cztctl rpc sdk \
+  --proto proto/order.proto \
+  --repo https://gitlab.ddtz.com/rpc-sdk/order-sdk.git \
+  --style gozero \
+  --branch develop \
+  -m \
+  --repo-branch main \
+  --goproxy https://goproxy.cn,direct
+```
+
+### SDK 调用方使用
+
+```bash
+# 拉取 SDK
+go get gitlab.ddtz.com/rpc-sdk/order-sdk@latest
+
+# 或指定版本
+go get gitlab.ddtz.com/rpc-sdk/order-sdk@v1.0.2
+```
+
+```go
+import "gitlab.ddtz.com/rpc-sdk/order-sdk/client/order"
+
+client := order.NewOrder(zrpc.MustNewClient(conf.OrderRpc))
+resp, err := client.GetOrder(ctx, &order.GetOrderRequest{Id: 123})
+```
 
 ## env
 
