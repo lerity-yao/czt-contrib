@@ -2,6 +2,19 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.8] - 2026-06-04
+
+### 新增
+
+- 新增 `GetTaskID`、`GetRetryCount`、`GetMaxRetry`、`GetQueueName` 包装函数，Handler 层无需直接依赖 asynq 即可获取任务元信息
+
+### 变更
+
+- README.md 全面重构：完整示例按 go-zero / 独立脚本 + Server / Client 四象限组织
+- 进阶指南新增任务分组聚合、放弃重试用法示例
+- 补充 `asynq.SkipRetry` 包装注意事项（`pkg/errors` 不兼容）
+- 监控指标章节标题层级修正
+
 ## [0.0.7] - 2026-06-04
 
 ### 新增

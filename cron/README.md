@@ -107,6 +107,143 @@ go get github.com/lerity-yao/czt-contrib/cron
 - 合理设置 Concurrency：IO 多则大，CPU 多则小。
 - 设置 ShutdownTimeout：必须大于你业务逻辑中可能出现的最长耗时。
 
+### ClientConfig (客户端配置)
+
+仅包含 `RedisConf`，与 Server 共用同一套 Redis 连接配置。
+
+### ServerOption
+
+| Option | 参数 | 说明 |
+|--------|------|------|
+| `WithServerTLS` | `*tls.Config` | 设置 Redis TLS 连接配置 |
+| `WithServerLogger` | `asynq.Logger` | 替换默认日志器（推荐 `&cron.AsynqLogger{}` 对接 go-zero logx） |
+| `WithGroupAggregator` | `asynq.GroupAggregator` | 注入分组聚合器，启用 Group 功能 |
+| `WithRetryDelayFunc` | `asynq.RetryDelayFunc` | 自定义重试退避策略（默认 `ExponentialRetryDelay`） |
+
+### ClientOption
+
+| Option | 参数 | 说明 |
+|--------|------|------|
+| `WithClientTLS` | `*tls.Config` | 设置 Redis TLS 连接配置 |
+
+
+## API 参考
+
+### 构造函数
+
+| 函数 | 签名 | 说明 |
+|------|------|------|
+| `MustNewServer` | `func MustNewServer(conf ServerConfig, opts ...ServerOption) Server` | 创建 Server，失败 panic |
+| `NewServer` | `func NewServer(conf ServerConfig, opts ...ServerOption) (Server, error)` | 创建 Server，失败返回 error |
+| `MustNewClient` | `func MustNewClient(conf ClientConfig, opts ...ClientOption) *CommonClient` | 创建 Client，失败 panic |
+| `NewClient` | `func NewClient(conf ClientConfig, opts ...ClientOption) (*CommonClient, error)` | 创建 Client，失败返回 error |
+| `MustNewClientFromRedisClient` | `func MustNewClientFromRedisClient(rds redis.UniversalClient) *CommonClient` | 从已有 Redis 连接创建 Client，失败 panic |
+| `NewClientFromRedisClient` | `func NewClientFromRedisClient(rds redis.UniversalClient) (*CommonClient, error)` | 从已有 Redis 连接创建 Client，失败返回 error |
+
+### 公开类型
+
+| 类型 | 定义 | 说明 |
+|------|------|------|
+| `Task` | `struct { Type string; Payload []byte }` | Handler 接收的任务载体，Type 为任务类型，Payload 为原始字节数据 |
+| `HandlerFunc` | `func(ctx context.Context, t *Task) error` | 任务处理函数签名，所有 Handler 均需实现此类型 |
+| `AsynqLogger` | `struct{}` | 内置日志适配器，将 asynq 日志桥接到 go-zero logx |
+
+### Server 接口方法
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `Add` | `Add(pattern string, handler HandlerFunc)` | 注册任务 Handler，自动拼接 Namespace 前缀 |
+| `CronAdd` | `CronAdd(spec string, pattern string, opts ...asynq.Option) string` | 注册定时任务，自动设置 TaskID 去重，返回 EntryID |
+| `Start` | `Start()` | 启动 Scheduler + Processor，非阻塞 |
+| `Stop` | `Stop()` | 优雅停机：Scheduler → Server → Inspector 顺序关闭 |
+
+### Client 接口方法
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `Push` | `Push(ctx, taskType string, payload []byte, opts ...asynq.Option) (*asynq.TaskInfo, error)` | 立即执行，推送原始字节 |
+| `PushJson` | `PushJson(ctx, taskType string, data any, opts ...asynq.Option) (*asynq.TaskInfo, error)` | 立即执行，自动 JSON 序列化 |
+| `PushIn` | `PushIn(ctx, taskType string, payload []byte, delay time.Duration, opts ...) (*asynq.TaskInfo, error)` | 延时执行，指定 Duration |
+| `PushInJson` | `PushInJson(ctx, taskType string, data any, delay time.Duration, opts ...) (*asynq.TaskInfo, error)` | 延时执行，自动 JSON 序列化 |
+| `PushAt` | `PushAt(ctx, taskType string, payload []byte, at time.Time, opts ...) (*asynq.TaskInfo, error)` | 定点执行，指定绝对时间 |
+| `PushAtJson` | `PushAtJson(ctx, taskType string, data any, at time.Time, opts ...) (*asynq.TaskInfo, error)` | 定点执行，自动 JSON 序列化 |
+| `CancelTask` | `CancelTask(queue, taskID string) error` | 撤回 Scheduled/Pending/Retry 状态的任务 |
+| `RescheduleTask` | `RescheduleTask(ctx, queue, taskID, taskType string, data any, newDelay time.Duration, opts ...) (*asynq.TaskInfo, error)` | 原子撤回 + 重新投递，TaskID 不变 |
+| `Close` | `Close() error` | 关闭客户端连接 |
+
+> 所有 Push 系列方法默认 `MaxRetry=0`（不重试），可通过 opts 覆盖。
+
+### 工具函数
+
+| 函数 | 签名 | 说明 |
+|------|------|------|
+| `ExponentialRetryDelay` | `func(n int, _ error, _ *asynq.Task) time.Duration` | 内置指数退避（`2^n - 1` 秒），Server 默认使用 |
+| `GetTaskID` | `func(ctx context.Context) (string, bool)` | 任务 ID，重试过程中保持不变 |
+| `GetRetryCount` | `func(ctx context.Context) (int, bool)` | 当前重试次数，0 = 首次执行 |
+| `GetMaxRetry` | `func(ctx context.Context) (int, bool)` | 最大重试次数上限 |
+| `GetQueueName` | `func(ctx context.Context) (string, bool)` | 任务所在队列名 |
+
+## 进阶指南
+
+### Namespace 与 TaskType 匹配规则
+
+**这是一个重要的注意事项，客户端投递任务时必须了解服务端的 Namespace 配置。**
+
+服务端配置 `Namespace` 后会产生两个影响：
+
+1. **taskType 自动拼接**：`Add` 方法将 pattern 转换为 `Namespace:pattern` 格式
+2. **队列自动创建**：服务端监听以 Namespace 命名的队列
+
+```go
+// server.go Add 方法核心逻辑
+func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
+    realPattern := pattern
+    if c.conf.Namespace != "" {
+        realPattern = fmt.Sprintf("%s:%s", c.conf.Namespace, pattern)
+    }
+    c.Mux.HandleFunc(realPattern, asynqHandler)
+}
+
+// server.go buildConfig 方法核心逻辑
+func (c *CommonServer) buildConfig() {
+    queues := c.conf.Queues
+    if len(queues) == 0 && c.conf.Namespace != "" {
+        queues = map[string]int{
+            c.conf.Namespace: 1,  // 服务端监听以 Namespace 命名的队列
+        }
+    }
+    // ...
+}
+```
+
+**在 go-zero 环境中**，通常会将服务名作为 Namespace：
+
+```go
+// serviceContext.go 中常见写法
+c.WorkConf.Namespace = c.Name  // 使用 go-zero 配置的服务名
+```
+
+**客户端投递任务时必须同时满足两个条件：**
+
+1. **taskType 带 Namespace 前缀**：与服务端注册的完整 pattern 一致
+2. **指定队列**：通过 `asynq.Queue(namespace)` 指定任务投递到哪个队列
+
+```go
+import "github.com/hibiken/asynq"
+
+// 假设服务端配置：Namespace = "order-service"，注册：Add("send_email", handler)
+// 服务端实际注册的 pattern："order-service:send_email"
+// 服务端监听的队列："order-service"
+
+// ✔️ 正确写法：taskType 带 namespace + 指定队列
+client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-service"))
+```
+
+**总结**：
+- 客户端和服务端统一 Namespace 命名规范
+- 定义常量统一管理 taskType 和 Namespace，避免硬编码
+- 若服务端未配置 Namespace，则 taskType 直接使用原始 pattern，无需指定队列（默认 "default"）
+
 ### 重试退避策略
 
 Server 默认使用 `ExponentialRetryDelay` 指数退避策略，延迟公式为 `2^n - 1` 秒：
@@ -132,6 +269,39 @@ server := cron.MustNewServer(c.WorkConf,
     }),
 )
 ```
+
+#### 任务元信息
+
+在 Handler 中可通过 `ctx` 获取任务运行时元信息：
+
+```go
+retryCount, _ := cron.GetRetryCount(ctx)  // 当前第几次重试（0 = 首次执行）
+maxRetry, _   := cron.GetMaxRetry(ctx)    // 最大重试次数
+taskID, _     := cron.GetTaskID(ctx)      // 任务 ID（重试不变）
+queueName, _  := cron.GetQueueName(ctx)   // 队列名
+```
+
+#### 放弃重试
+
+当错误不可恢复时（参数非法、业务拒绝、幂等冲突），使用 `asynq.SkipRetry` 放弃重试：
+
+```go
+// internal/logic/demoA/gdemoalogic.go
+import "github.com/hibiken/asynq"
+
+func (l *GDemoALogic) GDemoA(req *types.Name) error {
+    if req.Name == "" {
+        // 参数非法，重试也没用
+        return fmt.Errorf("invalid name: %w", asynq.SkipRetry)
+    }
+    // ...
+    return nil
+}
+```
+
+> **判断标准：** 重试了结果还是一样 → SkipRetry；重试了有可能成功 → 让它重试。
+>
+> **注意：** 必须使用 `fmt.Errorf("%w", asynq.SkipRetry)` 包装。`github.com/pkg/errors` 的 `errors.Wrap` 不兼容标准库 `errors.Is()` 解包链，asynq 无法识别。
 
 ### 任务分组聚合（Group Aggregation）
 
@@ -192,15 +362,25 @@ client.PushJson(ctx, "order-service:send_email", payload,
 )
 ```
 
-**3. 服务端 Handler 处理合并后的任务**
+**3. 服务端注册合并后任务的 Handler**
 
 ```go
-// 聚合器把多封邮件合并为一个 batch_send_email 任务
-server.Add("batch_send_email", func(ctx context.Context, t *cron.Task) error {
-    var emails []EmailPayload
-    json.Unmarshal(t.Payload, &emails)
-    return batchSendEmails(emails)
-})
+// internal/handler/batch/batchSendEmailHandler.go
+func BatchSendEmailHandler(svcCtx *svc.ServiceContext) cron.HandlerFunc {
+    return func(ctx context.Context, t *cron.Task) error {
+        var emails []types.EmailPayload
+        if err := json.Unmarshal(t.Payload, &emails); err != nil {
+            return err
+        }
+        l := batchLogic.NewBatchSendEmailLogic(ctx, svcCtx)
+        return l.BatchSendEmail(emails)
+    }
+}
+```
+
+```go
+// internal/handler/workers.go
+serverCtx.CronServer.Add("batch_send_email", batch.BatchSendEmailHandler(serverCtx))
 ```
 
 #### 注意事项
@@ -209,104 +389,7 @@ server.Add("batch_send_email", func(ctx context.Context, t *cron.Task) error {
 - 客户端所有 Push 系列方法均支持 `asynq.Group()` 选项
 - 一个 Server 只有一个聚合器，多个分组通过 `group` 参数路由
 
-
-## 💎 核心接口能力详解
-
-### Server 接口：高性能消费者与调度引擎
-
-Server 封装了任务的获取、解码、中间件执行及定时触发逻辑。
-
-| 接口方法 | 参数说明                                                                      | 核心能力                                                                                                                                  |
-| -------- |---------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------|
-| Add      | pattern: 任务类型 <br>handler: 处理函数<br>cronSpec: Cron 表达式<br>opts: Asynq 原生配置 | 三位一体注册：<br>1. 自动拼接 Namespace:Pattern。<br>2. 逻辑隔离：防止不同服务误消费。<br>3. 自产自销：若有 cronSpec 则自动注册为定时任务，否则作为普通 Worker。<br> 普通的work需要有client投递任务 |
-| Start    | 无                                                                         | 异步启动：启动 Scheduler 和 Processor 后立即返回。适用于 go-zero 的 ServiceGroup 管理，不会阻塞主线程。                                                            |
-| Stop     | 无                                                                         | 优雅停机：按照 Scheduler -> Server -> Inspector 顺序关闭。先停产，再清空存量任务，最后释放 Redis 连接。                                                              |
-| CronAdd | spec: Cron 表达式<br>pattern: 任务类型<br>opts: Asynq 原生配置 | 注册定时任务：根据 Cron 表达式自动触发任务。支持秒级精度。 |
-## Client 接口：强类型生产者与任务控制器
-Client 提供了多种任务进入 Redis 的姿势。
-
-| 接口方法 | 入参 | 类型 | 核心能力 |
-| -------- | ---- | ---- | -------- |
-| Push | `ctx context.Context`<br>`taskType string`<br>`payload []byte`<br>`opts ...asynq.Option` | 立即 | 立即执行，推送原始字节数据 |
-| PushJson | `ctx context.Context`<br>`taskType string`<br>`data any`<br>`opts ...asynq.Option` | 立即 | 立即执行，自动 JSON 序列化 |
-| PushIn | `ctx context.Context`<br>`taskType string`<br>`payload []byte`<br>`delay time.Duration`<br>`opts ...asynq.Option` | 延时 | 延时执行，指定 Duration（如 1h 后执行）|
-| PushInJson | `ctx context.Context`<br>`taskType string`<br>`data any`<br>`delay time.Duration`<br>`opts ...asynq.Option` | 延时 | 延时执行，自动 JSON 序列化 |
-| PushAt | `ctx context.Context`<br>`taskType string`<br>`payload []byte`<br>`at time.Time`<br>`opts ...asynq.Option` | 定时 | 定点执行，指定绝对时间点 |
-| PushAtJson | `ctx context.Context`<br>`taskType string`<br>`data any`<br>`at time.Time`<br>`opts ...asynq.Option` | 定时 | 定点执行，自动 JSON 序列化 |
-| CancelTask | `queue string`<br>`taskID string` | 控制 | 撤回处于 Scheduled/Pending/Retry 状态的任务 |
-| RescheduleTask | `ctx context.Context`<br>`queue string`<br>`taskID string`<br>`taskType string`<br>`data any`<br>`newDelay time.Duration`<br>`opts ...asynq.Option` | 控制 | 原子化"撤回 + 重新投递"，固定 TaskID 确保幂等 |
-| Close | 无 | 关闭 | 关闭客户端连接 |
-
-**所有 Push 系列方法默认 MaxRetry=0（不重试），可通过 opts 覆盖。返回值 `*asynq.TaskInfo` 包含 TaskID 等信息。**
-
-**定时循环执行任务不支持投递，只能在server端注册，server端会根据cronSpec注册定时触发任务**
-
-### Namespace 与 TaskType 匹配规则
-
-**这是一个重要的注意事项，客户端投递任务时必须了解服务端的 Namespace 配置。**
-
-服务端配置 `Namespace` 后会产生两个影响：
-
-1. **taskType 自动拼接**：`Add` 方法将 pattern 转换为 `Namespace:pattern` 格式
-2. **队列自动创建**：服务端监听以 Namespace 命名的队列
-
-```go
-// server.go Add 方法核心逻辑
-func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
-    realPattern := pattern
-    if c.conf.Namespace != "" {
-        realPattern = fmt.Sprintf("%s:%s", c.conf.Namespace, pattern)
-    }
-    c.Mux.HandleFunc(realPattern, asynqHandler)
-}
-
-// server.go buildConfig 方法核心逻辑
-func (c *CommonServer) buildConfig() {
-    queues := c.conf.Queues
-    if len(queues) == 0 && c.conf.Namespace != "" {
-        queues = map[string]int{
-            c.conf.Namespace: 1,  // 服务端监听以 Namespace 命名的队列
-        }
-    }
-    // ...
-}
-```
-
-**在 go-zero 环境中**，通常会将服务名作为 Namespace：
-
-```go
-// serviceContext.go 中常见写法
-c.WorkConf.Namespace = c.Name  // 使用 go-zero 配置的服务名
-```
-
-**客户端投递任务时必须同时满足两个条件：**
-
-1. **taskType 带 Namespace 前缀**：与服务端注册的完整 pattern 一致
-2. **指定队列**：通过 `asynq.Queue(namespace)` 指定任务投递到哪个队列
-
-```go
-import "github.com/hibiken/asynq"
-
-// 假设服务端配置：Namespace = "order-service"，注册：Add("send_email", handler)
-// 服务端实际注册的 pattern："order-service:send_email"
-// 服务端监听的队列："order-service"
-
-// ❌ 错误写法：taskType 不带 namespace，且未指定队列
-client.PushJson(ctx, "send_email", payload)
-
-// ❌ 错误写法：taskType 正确，但未指定队列（默认投到 "default" 队列）
-client.PushJson(ctx, "order-service:send_email", payload)
-
-// ✅ 正确写法：taskType 带 namespace + 指定队列
-client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-service"))
-```
-
-**总结**：
-- 客户端和服务端统一 Namespace 命名规范
-- 定义常量统一管理 taskType 和 Namespace，避免硬编码
-- 若服务端未配置 Namespace，则 taskType 直接使用原始 pattern，无需指定队列（默认 "default"）
-
-## 链路跟踪
+### 链路追踪
 
 - 生产者：在 CommonClient 中通过 otel.Inject 将 TraceID 压入 Task 的 Header。
 - 消费者：通过 TraceMiddleware 调用 otel.Extract 恢复上下文。
@@ -314,13 +397,31 @@ client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-ser
 
 注意，这链路跟踪是集成在 go-zero 框架中的，你需要在 go-zero 项目中开启链路跟踪功能。
 
-## 监控指标
+### 日志替换
+
+默认使用 asynq 自带日志。通过 `WithServerLogger` 替换：
+
+```go
+cron := cron.MustNewServer(c.WorkConf, cron.WithServerLogger(&cron.AsynqLogger{}))
+```
+
+### Redis TLS
+
+通过 `WithServerTLS` / `WithClientTLS` 配置 TLS 连接：
+
+```go
+tlsCfg := &tls.Config{InsecureSkipVerify: true}
+server := cron.MustNewServer(conf, cron.WithServerTLS(tlsCfg))
+client := cron.MustNewClient(conf, cron.WithClientTLS(tlsCfg))
+```
+
+### 监控指标
 
 监控指标已并入 go-zero 的 Prometheus 体系，通过 `/metrics` 端点暴露。
 
-### Server 端指标 (`cron_server_`)
+#### Server 端指标 (`cron_server_`)
 
-#### 任务处理指标（Interceptor 采集）
+##### 任务处理指标（Interceptor 采集）
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
@@ -332,14 +433,14 @@ client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-ser
 | `cron_server_skip_retry_total` | Counter | task_type | 跳过重试次数 |
 | `cron_server_panic_total` | Counter | task_type | panic 次数（panic 不重试） |
 
-#### Scheduler 指标
+##### Scheduler 指标
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
 | `cron_server_scheduler_trigger_total` | Counter | task_type | 定时任务触发次数 |
 | `cron_server_scheduler_registered` | Gauge | - | 当前注册的定时任务数 |
 
-#### 队列状态指标（Collector 采集）
+##### 队列状态指标（Collector 采集）
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
@@ -355,7 +456,7 @@ client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-ser
 
 > 队列状态指标通过自定义 `QueueMetricsCollector` 采集，支持队列白名单过滤，解决多服务共用 Redis 时指标混杂问题。
 
-### Client 端指标 (`cron_client_`)
+#### Client 端指标 (`cron_client_`)
 
 | 指标 | 类型 | 标签 | 说明 |
 |------|------|------|------|
@@ -366,291 +467,215 @@ client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-ser
 
 注意：这些指标需要在 go-zero 项目中开启 Prometheus 监控功能。
 
-## 日志
+## 完整示例
 
-默认在日志中使用的是 asynq 自带的日志。你可以显性的通过调用 `WithServerLogger` 来指定日志器。
-
-```go
-// 使用 go-zero logx 替换 asynq 自带的日志
-cron := cron.MustNewServer(c.WorkConf, cron.WithServerLogger(&cron.AsynqLogger{}))
-```
-
-## Redis TLS
-
-可以显示的类型于 `WithServerLogger` 一样，通过 `WithServerTLS` 来指定 TLS 配置。
-
-## server 使用
 ### 在 go-zero 中使用
 
-#### 目录结构
+#### Server
+
+**目录结构**
+
 ```shell
-├── etc
-│   └── etc.yaml
-├── go.mod
-├── go.sum
-├── internal
-│   ├── config
-│   │   └── config.go
-│   ├── handler
-│   │   ├── demoA
-│   │   │   └── demoAhanadler.go
-│   │   └── worker.go
-│   ├── logic
-│   │   └── demoA
-│   │       └── demoAxxxLogic.go
-│   ├── svc
-│   │   └── serviceContext.go
-│   └── types
-│       └── types.go
+├── etc/
+│   └── etc.yaml
+├── internal/
+│   ├── config/
+│   │   └── config.go
+│   ├── handler/
+│   │   ├── demoA/
+│   │   │   └── gdemoahandler.go
+│   │   └── workers.go
+│   ├── logic/
+│   │   └── demoA/
+│   │       └── gdemoalogic.go
+│   ├── svc/
+│   │   └── servicecontext.go
+│   └── types/
+│       └── types.go
 └── main.go
 ```
 
-#### 代码
+**代码**
+
 ```go
 // internal/config/config.go
 type BaseConfig struct {
     rest.RestConf
-    WorkConf             cron.ServerConfig
+    WorkConf cron.ServerConfig
 }
 ```
 
 ```go
 // main.go
-var configFile = flag.String("f", "etc/etc.yaml", "the config file")
-
 func main() {
     flag.Parse()
-    
-    // 加载基础配置
+
     var c config.BaseConfig
     conf.MustLoad(*configFile, &c, conf.UseEnv())
     ctx := svc.NewServiceContext(c)
     serviceGroup := service.NewServiceGroup()
     defer serviceGroup.Stop()
     handler.RegisterHandlers(serviceGroup, ctx)
-    
+
     fmt.Printf("Starting server at %s:%d...\n", c.Host, c.Port)
     serviceGroup.Start()
 }
-
 ```
 
 ```go
-// internal/svc/serviceContext.go
+// internal/svc/servicecontext.go
 type ServiceContext struct {
-    Config config.Config
-    Cron   cron.Server
+    Config     config.Config
+    CronServer cron.Server
 }
 
 func NewServiceContext(c config.Config) *ServiceContext {
     c.WorkConf.Namespace = c.Name
-    cron := cron.MustNewServer(c.WorkConf, cron.WithServerLogger(&cron.AsynqLogger{}))
-    
+    cronServer := cron.MustNewServer(c.WorkConf)
+
     return &ServiceContext{
-        Config: c,
-        Cron:   cron,
+        Config:     c,
+        CronServer: cronServer,
     }
 }
 ```
 
 ```go
-// internal/handler/worker.go
+// internal/handler/workers.go
 func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
-    serverCtx.Cron.Add("demoA", demoA.DemoAHandle(serverCtx))
-    server.Add(serverCtx.Cron)
+    serverCtx.CronServer.CronAdd("*/1 * * * *", "GDemoA")
+    serverCtx.CronServer.Add("GDemoA", demoA.GDemoAHandler(serverCtx))
+    server.Add(serverCtx.CronServer)
 }
 ```
 
 ```go
-// internal/handler/demoA/demoAhandler.go
-// 定时任务，没有req，如果是其他的比如延时，指定时间，立即执行，需要把json部分代码注释去掉
-func DemoAHandle(svcCtx *svc.ServiceContext) cron.HandlerFunc {
+// internal/handler/demoA/gdemoahandler.go
+func GDemoAHandler(svcCtx *svc.ServiceContext) cron.HandlerFunc {
     return func(ctx context.Context, t *cron.Task) error {
-        var req types.DemoAxxxReq
-        //err := json.Unmarshal(t.Payload, &req)
-        //if err != nil {
-        //	return err
-        //}
-        l := demoA.NewDemoAxxxLogic(ctx, svcCtx)
-        return l.NewDemoAxxx(req)
+        var req types.Name
+        if err := json.Unmarshal(t.Payload, &req); err != nil {
+            return err
+        }
+        l := demoA.NewGDemoALogic(ctx, svcCtx)
+        return l.GDemoA(&req)
     }
 }
 ```
 
 ```go
-// internal/logic/demoA/demoAxxxLogic.go
-package demoA
-
-import (
-	"context"
-	"example/internal/svc"
-	"example/internal/types"
-	"github.com/zeromicro/go-zero/core/logc"
-	"github.com/zeromicro/go-zero/core/logx"
-)
-
-type DemoAxxxLogic struct {
-	logx.Logger
-	ctx    context.Context
-	svcCtx *svc.ServiceContext
+// internal/logic/demoA/gdemoalogic.go
+type GDemoALogic struct {
+    logx.Logger
+    ctx    context.Context
+    svcCtx *svc.ServiceContext
 }
 
-func NewDemoAxxxLogic(ctx context.Context, svcCtx *svc.ServiceContext) *DemoAxxxLogic {
-	return &DemoAxxxLogic{
-		Logger: logx.WithContext(ctx),
-		ctx:    ctx,
-		svcCtx: svcCtx,
-	}
-}
-
-func (l *DemoAxxxLogic) NewDemoAxxx(req types.DemoAxxxReq) error {
-	logc.Infof(l.ctx, "NewDemoAxxx called, %v", req)
-	return nil
-}
-```
-
-启动项目，就能看到日志
-
-里面关于consul的，并没有在上面代码提现
-
-```shell
-API server listening at: 127.0.0.1:41349
-{"@timestamp":"2026-02-08T13:55:44.236+08:00","caller":"devserver/server.go:71","content":"Starting dev http server at :6060","level":"info"}
-register center consul url is 0.0.0.0:8886
- type is ttl
-{"@timestamp":"2026-02-08T13:55:44.369+08:00","caller":"consul@v0.1.5/register.go:159","content":"Service tax-invoice.cron id tax-invoice.cron-192.168.13.72-8886 registered successfully","level":"info"}
-{"@timestamp":"2026-02-08T13:55:44.369+08:00","caller":"cron/server.go:146","content":"[ASYNQ] Cron job registered: [*/1 * * * *] -> tax-invoice.cron:demoA (EntryID: 902bd196-a99f-427f-bc0b-f06419781d19)","level":"info"}
-{"@timestamp":"2026-02-08T13:55:44.369+08:00","caller":"cron/server.go:132","content":"[ASYNQ] 注册定时任务: tax-invoice.cron:demoA","level":"info"}
-Starting server at 0.0.0.0:8886...
-{"@timestamp":"2026-02-08T13:55:44.369+08:00","caller":"cron/log.go:16","content":"Scheduler starting","level":"info"}
-{"@timestamp":"2026-02-08T13:55:44.370+08:00","caller":"cron/log.go:16","content":"Scheduler timezone is set to Local","level":"info"}
-{"@timestamp":"2026-02-08T13:55:44.370+08:00","caller":"cron/log.go:16","content":"Starting processing","level":"info"}
-{"@timestamp":"2026-02-08T13:55:44.370+08:00","caller":"cron/log.go:16","content":"Send signal TSTP to stop processing new tasks","level":"info"}
-{"@timestamp":"2026-02-08T13:55:44.370+08:00","caller":"cron/log.go:16","content":"Send signal TERM or INT to terminate the process","level":"info"}
-```
-
-执行 `curl http://127.0.0.1:6060/metrics` 可以看到 Prometheus 指标
-
-#### 在独立脚本或非 go-zero 项目中使用
-
-```go
-func main() {
-    conf := cron.ServerConfig{
-        RedisConf: cron.RedisConf{Addr: "localhost:6379", Mode: "single"},
-        Concurrency: 10,
-    }
-    srv := cron.MustNewServer(conf)
-    
-    srv.Add("sync_data", func(ctx context.Context, t *cron.Task) error {
-        fmt.Println("正在处理同步...")
-        return nil
-    }, "")
-	
-    srv.Start()
-}
-```
-
-## Client 使用
-
-`Client` 不仅支持简单的任务发送，还深度集成了 **OpenTelemetry 链路追踪** 和 **任务生命周期控制**。
-
-### go-zero 中使用
-
-**重要：客户端投递任务时，taskType 必须与服务端注册的完整 pattern 一致（包含 Namespace 前缀）。**
-
-```go
-// svc/serviceContext.go
-type ServiceContext struct {
-    Config config.Config
-    Cron   cron.Client
-}
-
-func NewServiceContext(c config.Config) *ServiceContext {
-    cronClient := cron.MustNewClient(c.WorkConf.ClientConfig)
-    
-    return &ServiceContext{
-        Config: c,
-        Cron:   cronClient,
+func NewGDemoALogic(ctx context.Context, svcCtx *svc.ServiceContext) *GDemoALogic {
+    return &GDemoALogic{
+        Logger: logx.WithContext(ctx),
+        ctx:    ctx,
+        svcCtx: svcCtx,
     }
 }
-```   
 
-```go
-// logic/order_logic.go
-import "github.com/hibiken/asynq"
-
-func (l *OrderLogic) CreateOrder(req *types.OrderReq) error {
-    // 业务逻辑处理...
-    
-    payload := map[string]string{"email": "user@example.com", "content": "Welcome!"}
-    
-    // ⚠️ 关键点：
-    // 1. taskType 必须带上服务端配置的 Namespace 前缀
-    // 2. 必须通过 asynq.Queue() 指定队列，队列名 = Namespace
-    //
-    // 服务端：c.WorkConf.Namespace = c.Name (假设 c.Name = "order-service")
-    // 服务端：server.Add("send_email", handler) → 实际注册为 "order-service:send_email"
-    // 服务端：监听队列 "order-service"
-    
-    namespace := l.svcCtx.Config.Name
-    taskType := fmt.Sprintf("%s:%s", namespace, "send_email")
-    _, err := l.svcCtx.Cron.PushJson(l.ctx, taskType, payload, asynq.Queue(namespace))
-    if err != nil {
-        return err
-    }
-    
+func (l *GDemoALogic) GDemoA(req *types.Name) error {
+    logc.Infof(l.ctx, "GDemoA called, %v", req)
     return nil
 }
 ```
 
+#### Client
+
+**重要：客户端投递任务时，taskType 必须与服务端注册的完整 pattern 一致（包含 Namespace 前缀）。**
+
 ```go
-// 定义常量统一管理 taskType 和 Namespace（推荐做法）
+// internal/svc/servicecontext.go
+type ServiceContext struct {
+    Config     config.Config
+    CronClient cron.Client
+}
+
+func NewServiceContext(c config.Config) *ServiceContext {
+    cronClient := cron.MustNewClient(c.ClientConf)
+
+    return &ServiceContext{
+        Config:     c,
+        CronClient: cronClient,
+    }
+}
+```
+
+```go
+// internal/logic/order_logic.go
 import "github.com/hibiken/asynq"
 
-const (
-    Namespace        = "order-service"  // 与服务端 Namespace 保持一致
-    TaskSendEmail    = Namespace + ":send_email"
-    TaskSyncData     = Namespace + ":sync_data"
-)
-
 func (l *OrderLogic) CreateOrder(req *types.OrderReq) error {
-    payload := map[string]string{"email": "user@example.com"}
-    _, err := l.svcCtx.Cron.PushJson(l.ctx, TaskSendEmail, payload, asynq.Queue(Namespace))
+    payload := map[string]string{"email": "user@example.com", "content": "Welcome!"}
+
+    // taskType 必须带 Namespace 前缀，Queue 必须指定为 Namespace
+    namespace := l.svcCtx.Config.Name
+    taskType := fmt.Sprintf("%s:%s", namespace, "send_email")
+    _, err := l.svcCtx.CronClient.PushJson(l.ctx, taskType, payload, asynq.Queue(namespace))
     return err
 }
 ```
 
-### 独立脚本或非 go-zero 项目中使用
+```go
+// 推荐：定义常量统一管理 taskType
+const (
+    Namespace     = "order-service"
+    TaskSendEmail = Namespace + ":send_email"
+    TaskSyncData  = Namespace + ":sync_data"
+)
+
+func (l *OrderLogic) CreateOrder(req *types.OrderReq) error {
+    payload := map[string]string{"email": "user@example.com"}
+    _, err := l.svcCtx.CronClient.PushJson(l.ctx, TaskSendEmail, payload, asynq.Queue(Namespace))
+    return err
+}
+```
+
+### 独立脚本中使用
+
+#### Server
+
+```go
+func main() {
+    conf := cron.ServerConfig{
+        RedisConf:   cron.RedisConf{Addr: "localhost:6379", Mode: "single"},
+        Concurrency: 10,
+    }
+    srv := cron.MustNewServer(conf)
+
+    srv.Add("sync_data", func(ctx context.Context, t *cron.Task) error {
+        fmt.Println("正在处理同步...")
+        return nil
+    })
+
+    srv.Start()
+}
+```
+
+#### Client
 
 ```go
 func main() {
     clientConf := cron.ClientConfig{
-        RedisConf: cron.RedisConf{Addr: "localhost:6379", Password: "xxx"},
+        RedisConf: cron.RedisConf{Addr: "localhost:6379", Mode: "single"},
     }
-    
+
     client := cron.MustNewClient(clientConf)
     defer client.Close()
 
-    // ⚠️ 若服务端配置了 Namespace：
-    // 1. taskType 必须带 Namespace 前缀
-    // 2. 必须通过 asynq.Queue() 指定队列
-    //
-    // 服务端 Namespace = "data-service"，注册 Add("raw_task", handler)
-    // taskType = "data-service:raw_task"，队列 = "data-service"
-    client.Push(context.Background(), "data-service:raw_task", []byte("hello world"), asynq.Queue("data-service"))
-    
-    // 若服务端未配置 Namespace，直接使用原始 pattern，队列默认为 "default"
-    // client.Push(context.Background(), "raw_task", []byte("hello world"))
+    // 若服务端配置了 Namespace，taskType 必须带前缀，并指定 Queue
+    client.Push(context.Background(), "data-service:raw_task", []byte("hello"), asynq.Queue("data-service"))
+
+    // 若服务端未配置 Namespace，直接使用原始 pattern
+    // client.Push(context.Background(), "raw_task", []byte("hello"))
 }
 ```
 
 ## 更新日志
 
 查看 [CHANGELOG.md](./CHANGELOG.md)
-
-
-
-
-
-
-
