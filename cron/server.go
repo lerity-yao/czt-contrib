@@ -84,6 +84,7 @@ func (c *CommonServer) buildConfig() {
 		TaskCheckInterval:        toDuration(c.conf.TaskCheckInterval),
 		Queues:                   queues,
 		StrictPriority:           c.conf.StrictPriority,
+		RetryDelayFunc:           ExponentialRetryDelay,
 		ShutdownTimeout:          toDuration(c.conf.ShutdownTimeout),
 		HealthCheckInterval:      toDuration(c.conf.HealthCheckInterval),
 		DelayedTaskCheckInterval: toDuration(c.conf.DelayedTaskCheckInterval),
@@ -150,11 +151,12 @@ func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
 
 	// 注册到原生的 Mux
 	c.Mux.HandleFunc(realPattern, asynqHandler)
-	logx.Infof("[CRON] Task registered, waiting for dispatch: %s", realPattern)
+	logx.Infof("[CRON] Worker registered: %s", realPattern)
 
 }
 
 // CronAdd 注册定时任务 (Server 自产自销)
+// 自动以 realPattern 作为 TaskID，保证多实例部署时同一定时任务不会重复投递。
 func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option) string {
 	realPattern := pattern
 	finalOpts := opts
@@ -162,6 +164,7 @@ func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option
 		realPattern = fmt.Sprintf("%s:%s", c.conf.Namespace, pattern)
 		finalOpts = append(opts, asynq.Queue(c.conf.Namespace))
 	}
+	finalOpts = append(finalOpts, asynq.TaskID(realPattern))
 	task := asynq.NewTask(realPattern, nil)
 	entryID, err := c.Scheduler.Register(spec, task, finalOpts...)
 	if err != nil {
@@ -202,5 +205,17 @@ func WithServerTLS(tlsCfg *tls.Config) ServerOption {
 func WithServerLogger(logger asynq.Logger) ServerOption {
 	return func(c *CommonServer) {
 		c.config.Logger = logger
+	}
+}
+
+func WithGroupAggregator(ga asynq.GroupAggregator) ServerOption {
+	return func(c *CommonServer) {
+		c.config.GroupAggregator = ga
+	}
+}
+
+func WithRetryDelayFunc(fn asynq.RetryDelayFunc) ServerOption {
+	return func(c *CommonServer) {
+		c.config.RetryDelayFunc = fn
 	}
 }

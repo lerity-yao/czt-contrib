@@ -85,13 +85,16 @@ go get github.com/lerity-yao/czt-contrib/cron
 逻辑：Worker 与 Redis 的心跳检测。建议保持默认 15 秒。
 
 
-- GroupGracePeriod (int64): 聚合窗口期。默认 60 秒。即第一个任务进入组后，等多久才触发聚合。
+- GroupGracePeriod (int64): 聚合窗口期（滑动窗口）。默认 60 秒。每次有新任务进入组时重置计时器，宽限期内无新任务才触发聚合。
 
 
-- GroupMaxDelay (int64): 强制触发聚合的最长等待时间。
+- GroupMaxDelay (int64): 强制触发聚合的最长等待时间（硬上限）。默认 300 秒。从组内第一个任务到来算起，无论是否有新任务，到时间就强制聚合。防止 GracePeriod 被不断重置导致永不聚合。
 
 
-- GroupMaxSize (int64): 组内任务达到多少个时，不等待窗口期直接触发聚合。
+- GroupMaxSize (int64): 组内任务达到多少个时，不等待窗口期直接触发聚合。默认 0（无限制）。
+
+
+> 以上三个条件为 **OR** 关系，满足任意一个即触发聚合。需配合 `WithGroupAggregator` 使用，否则分组功能不生效。
 
 
 - JanitorInterval (int64): 检查并清理 Redis 中已完成、过期任务的时间间隔。
@@ -103,6 +106,108 @@ go get github.com/lerity-yao/czt-contrib/cron
 - 必须设置 Namespace：这是多服务共存的基础。
 - 合理设置 Concurrency：IO 多则大，CPU 多则小。
 - 设置 ShutdownTimeout：必须大于你业务逻辑中可能出现的最长耗时。
+
+### 重试退避策略
+
+Server 默认使用 `ExponentialRetryDelay` 指数退避策略，延迟公式为 `2^n - 1` 秒：
+
+| 重试次数 | 延迟 |
+|---------|------|
+| 1 | 1s |
+| 2 | 3s |
+| 3 | 7s |
+| 4 | 15s |
+| 5 | 31s |
+| 6 | 63s（~1分钟） |
+| 7 | 127s（~2分钟） |
+| 10 | 1023s（~17分钟） |
+
+如需自定义退避策略，可通过 `WithRetryDelayFunc` 覆盖：
+
+```go
+server := cron.MustNewServer(c.WorkConf,
+    cron.WithRetryDelayFunc(func(n int, e error, t *asynq.Task) time.Duration {
+        // 固定间隔 10 秒
+        return 10 * time.Second
+    }),
+)
+```
+
+### 任务分组聚合（Group Aggregation）
+
+将多个同组任务合并为一个批量任务再处理，适用于通知合并、批量写入等场景。
+
+#### 触发条件（三选一）
+
+| 条件 | 配置参数 | 默认值 | 触发机制 |
+|------|----------|--------|----------|
+| 宽限期超时 | `GroupGracePeriod` | 60s | **滑动窗口**：每来一个新任务重置计时器，宽限期内无新任务才触发 |
+| 最大延迟 | `GroupMaxDelay` | 300s | **硬上限**：从第一个任务到来算起，到时间强制聚合（兜底） |
+| 数量达标 | `GroupMaxSize` | 0（无限制） | 组内任务数达到阈值，立即聚合 |
+
+#### 触发场景示例
+
+假设配置：`GracePeriod=60s, MaxDelay=300s, MaxSize=50`
+
+| 场景 | 行为 |
+|------|------|
+| 来了 3 个任务后不再来 | 最后一个任务到达 60s 后聚合（命中 GracePeriod） |
+| 每隔 30s 持续来任务 | 到 300s 时强制聚合（命中 MaxDelay 兜底） |
+| 短时间连续来了 50 个任务 | 立即聚合（命中 MaxSize） |
+| 每隔 61s 来一个任务 | 每个任务单独聚合（61s > 60s，GracePeriod 先触发） |
+
+#### 使用方式
+
+**1. 服务端注入聚合器（必需）**
+
+```go
+import "github.com/hibiken/asynq"
+
+server := cron.MustNewServer(c.WorkConf,
+    cron.WithGroupAggregator(asynq.GroupAggregatorFunc(func(group string, tasks []*asynq.Task) *asynq.Task {
+        // 根据 group 名路由不同的聚合逻辑
+        switch group {
+        case "batch_email":
+            return mergeEmails(tasks)
+        case "batch_order":
+            return mergeOrders(tasks)
+        default:
+            return defaultMerge(tasks)
+        }
+    })),
+)
+```
+
+> 整个 Server 只有一个 `GroupAggregator`，通过 `group` 参数区分不同分组的聚合逻辑。
+
+**2. 客户端投递时指定分组**
+
+```go
+import "github.com/hibiken/asynq"
+
+// 投递到 "batch_email" 分组
+client.PushJson(ctx, "order-service:send_email", payload,
+    asynq.Queue("order-service"),
+    asynq.Group("batch_email"),  // 指定分组名
+)
+```
+
+**3. 服务端 Handler 处理合并后的任务**
+
+```go
+// 聚合器把多封邮件合并为一个 batch_send_email 任务
+server.Add("batch_send_email", func(ctx context.Context, t *cron.Task) error {
+    var emails []EmailPayload
+    json.Unmarshal(t.Payload, &emails)
+    return batchSendEmails(emails)
+})
+```
+
+#### 注意事项
+
+- 不传 `WithGroupAggregator` 时，分组功能完全不生效，Group 相关配置参数为摆设
+- 客户端所有 Push 系列方法均支持 `asynq.Group()` 选项
+- 一个 Server 只有一个聚合器，多个分组通过 `group` 参数路由
 
 
 ## 💎 核心接口能力详解

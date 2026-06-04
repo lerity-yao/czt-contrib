@@ -81,9 +81,9 @@ type (
 		// 服务器在聚合组内任务前等待新任务进入的时间。最小值为 1 秒，若小于 1 秒会引发 Panic。
 		// 如果设置为0,则默认使用1分钟,即60s
 		GroupGracePeriod int64 `json:",default=60"` // 任务分组 grace period，默认值为 60 秒，单位秒
-		// 在聚合组内任务前，服务器等待新任务进入的最长时间。
-		// 如果未设置、则无限制
-		GroupMaxDelay int64 `json:",default=0"` // 任务分组最大延迟时间，默认值为 0 秒，单位秒
+		// 在聚合组内任务前，服务器等待新任务进入的最长时间（硬上限，防止 GracePeriod 被不断重置导致永不聚合）。
+		// 如果设为 0，则无限制
+		GroupMaxDelay int64 `json:",default=300"` // 任务分组最大延迟时间，默认值为 300 秒（5分钟），单位秒
 		//	一个组内可聚合为单个任务的最大任务数量。达到此值会立即触发聚合
 		// 如果设为 0 ，则无限制
 		GroupMaxSize int64 `json:",default=0"` // 一个组内可聚合为单个任务的最大任务数量。达到此值会立即触发聚合，默认值为 0，表示无限制
@@ -181,11 +181,7 @@ func (s *ServerConfig) Validate() error {
 	}
 
 	if s.GroupGracePeriod < 0 {
-		return errors.New("group grace period must be a positive integer")
-	}
-
-	if s.GroupGracePeriod > 0 && s.GroupGracePeriod < 1 {
-		return errors.New("group grace period must be greater than or equal to 1 second")
+		return errors.New("group grace period must be a non-negative integer")
 	}
 
 	if s.GroupMaxSize < 0 {
