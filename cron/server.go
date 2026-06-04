@@ -19,6 +19,7 @@ type (
 		Stop()
 		Add(pattern string, handler HandlerFunc)
 		CronAdd(spec string, pattern string, opts ...asynq.Option) string
+		SetBaseContext(ctx context.Context)
 	}
 
 	CommonServer struct {
@@ -64,7 +65,6 @@ func NewServer(conf ServerConfig, opts ...ServerOption) (Server, error) {
 			}
 		},
 	})
-	s.Server = asynq.NewServer(s.redisClientOpts, s.config)
 	s.Mux = asynq.NewServeMux()
 	s.Mux.Use(RecoveryMiddleware)
 	s.Mux.Use(PrometheusMiddleware)
@@ -177,8 +177,18 @@ func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option
 	return entryID
 }
 
+// SetBaseContext 设置任务处理的基础上下文。
+// 所有任务 handler 收到的 ctx 将以此为父级。
+// 必须在 Start() 之前调用。
+func (c *CommonServer) SetBaseContext(ctx context.Context) {
+	c.config.BaseContext = func() context.Context {
+		return ctx
+	}
+}
+
 // Start 启动任务处理服务
 func (c *CommonServer) Start() {
+	c.Server = asynq.NewServer(c.redisClientOpts, c.config)
 	if err := c.Scheduler.Start(); err != nil {
 		logx.Must(err)
 	}

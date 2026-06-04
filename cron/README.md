@@ -154,6 +154,7 @@ go get github.com/lerity-yao/czt-contrib/cron
 |------|------|------|
 | `Add` | `Add(pattern string, handler HandlerFunc)` | 注册任务 Handler，自动拼接 Namespace 前缀 |
 | `CronAdd` | `CronAdd(spec string, pattern string, opts ...asynq.Option) string` | 注册定时任务，自动设置 TaskID 去重，返回 EntryID |
+| `SetBaseContext` | `SetBaseContext(ctx context.Context)` | 注入基础上下文，所有任务 handler 的 ctx 以此为父级，必须在 Start() 之前调用 |
 | `Start` | `Start()` | 启动 Scheduler + Processor，非阻塞 |
 | `Stop` | `Stop()` | 优雅停机：Scheduler → Server → Inspector 顺序关闭 |
 

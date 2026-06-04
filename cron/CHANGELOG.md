@@ -2,6 +2,16 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.9] - 2026-06-04
+
+### 新增
+
+- 新增 `SetBaseContext(ctx context.Context)` 方法，支持注入基础上下文，所有任务 handler 的 ctx 将以此为父级
+
+### 变更
+
+- `asynq.Server` 延迟到 `Start()` 时创建，支持在构造后、启动前动态配置上下文
+
 ## [0.0.8] - 2026-06-04
 
 ### 新增
