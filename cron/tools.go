@@ -17,8 +17,9 @@ func toDuration(v int64) time.Duration {
 
 // ExponentialRetryDelay 指数退避策略，延迟为 (2^n - 1) 秒。
 // 重试序列：1s, 3s, 7s, 15s, 31s, 63s, 127s, ...
+// n 为上次重试次数
 func ExponentialRetryDelay(n int, _ error, _ *asynq.Task) time.Duration {
-	return time.Duration(math.Pow(2, float64(n))-1) * time.Second
+	return time.Duration(math.Pow(2, float64(n+1))-1) * time.Second
 }
 
 // GetTaskID 从 context 中提取任务 ID。

@@ -4,14 +4,26 @@
 package handler
 
 import (
+	"time"
+
 	"example/example/internal/handler/demoA"
 	"example/example/internal/svc"
+
+	"github.com/hibiken/asynq"
 	"github.com/zeromicro/go-zero/core/service"
 )
 
 func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
-	serverCtx.CronServer.CronAdd("*/1 * * * *", "GDemoB")
+	var taskOpts []asynq.Option
+	taskOpts = append(taskOpts,
+		asynq.Timeout(time.Duration(serverCtx.Config.Timeout)*time.Millisecond),
+		asynq.MaxRetry(0),
+	)
+
+	serverCtx.CronServer.CronAdd("*/1 * * * *", "GDemoB",
+		demoA.GDemoBHandler(serverCtx), taskOpts...)
+
 	serverCtx.CronServer.Add("GDemoA", demoA.GDemoAHandler(serverCtx))
+
 	server.Add(serverCtx.CronServer)
-	serverCtx.CronServer.Add("GDemoB", demoA.GDemoBHandler(serverCtx))
 }

@@ -18,7 +18,7 @@ type (
 		Start()
 		Stop()
 		Add(pattern string, handler HandlerFunc)
-		CronAdd(spec string, pattern string, opts ...asynq.Option) string
+		CronAdd(spec string, pattern string, handler HandlerFunc, opts ...asynq.Option) string
 		SetBaseContext(ctx context.Context)
 	}
 
@@ -155,9 +155,14 @@ func (c *CommonServer) Add(pattern string, handler HandlerFunc) {
 
 }
 
-// CronAdd 注册定时任务 (Server 自产自销)
+// CronAdd 注册定时任务（Server 自产自销）：一次性完成 handler 注册与定时调度注册。
 // 自动以 realPattern 作为 TaskID，保证多实例部署时同一定时任务不会重复投递。
-func (c *CommonServer) CronAdd(spec string, pattern string, opts ...asynq.Option) string {
+// handler 通过内部 Add 注册到消费 Mux，pattern 与定时任务 task type 严格对齐。
+// 可通过 opts 传入 asynq.Timeout/asynq.MaxRetry 等元数据，到点入队时一并写入 msg。
+func (c *CommonServer) CronAdd(spec string, pattern string, handler HandlerFunc, opts ...asynq.Option) string {
+	// 注册消费 handler（Add 内部已处理 namespace 前缀）
+	c.Add(pattern, handler)
+
 	realPattern := pattern
 	finalOpts := opts
 	if c.conf.Namespace != "" {

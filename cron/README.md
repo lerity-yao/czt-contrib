@@ -152,8 +152,8 @@ go get github.com/lerity-yao/czt-contrib/cron
 
 | 方法 | 签名 | 说明 |
 |------|------|------|
-| `Add` | `Add(pattern string, handler HandlerFunc)` | 注册任务 Handler，自动拼接 Namespace 前缀 |
-| `CronAdd` | `CronAdd(spec string, pattern string, opts ...asynq.Option) string` | 注册定时任务，自动设置 TaskID 去重，返回 EntryID |
+| `Add` | `Add(pattern string, handler HandlerFunc)` | 注册任务 Handler（消费外部投递的任务），自动拼接 Namespace 前缀 |
+| `CronAdd` | `CronAdd(spec string, pattern string, handler HandlerFunc, opts ...asynq.Option) string` | 一步注册定时任务（自产自销），同时完成 handler 注册与定时调度，自动设置 TaskID 去重，返回 EntryID |
 | `SetBaseContext` | `SetBaseContext(ctx context.Context)` | 注入基础上下文，所有任务 handler 的 ctx 以此为父级，必须在 Start() 之前调用 |
 | `Start` | `Start()` | 启动 Scheduler + Processor，非阻塞 |
 | `Stop` | `Stop()` | 优雅停机：Scheduler → Server → Inspector 顺序关闭 |
@@ -303,6 +303,65 @@ func (l *GDemoALogic) GDemoA(req *types.Name) error {
 > **判断标准：** 重试了结果还是一样 → SkipRetry；重试了有可能成功 → 让它重试。
 >
 > **注意：** 必须使用 `fmt.Errorf("%w", asynq.SkipRetry)` 包装。`github.com/pkg/errors` 的 `errors.Wrap` 不兼容标准库 `errors.Is()` 解包链，asynq 无法识别。
+
+### 任务超时控制
+
+> **v0.1.0 起**：定时任务与投递任务的执行超时均可由业务侧 **按任务粒度** 注入，handler 收到的 `ctx` 自带 `Deadline`，到期后 `ctx.Done()` 自动触发，业务可主动退出。
+
+#### 设计要点
+
+- asynq 默认超时为硬编码常量 **30 分钟**，且无法通过 `asynq.Config` 全局配置。
+- 单任务超时通过入队元数据 `asynq.Timeout(d)` 写入 `msg.Timeout`，processor 拉出任务时调用 `context.WithDeadline(baseCtx, deadline)` 注入 ctx。
+- 仅入队动作（`CronAdd`、`Client.Push*`）能携带 `asynq.Timeout`；纯 handler 注册的 `Add` 不参与投递，无法设置。
+
+#### 定时任务：用 go-zero RestConf.Timeout 接管
+
+`rest.RestConf.Timeout` 默认 `3000ms`、必 > 0，可在 `workers.go` 直接复用为定时任务超时基准：
+
+```go
+// internal/handler/workers.go
+import (
+    "time"
+    "github.com/hibiken/asynq"
+)
+
+func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
+    var taskOpts []asynq.Option
+    taskOpts = append(taskOpts,
+        asynq.Timeout(time.Duration(serverCtx.Config.Timeout)*time.Millisecond),
+        asynq.MaxRetry(0),
+    )
+
+    serverCtx.CronServer.CronAdd("*/1 * * * *", "GDemoA",
+        demoA.GDemoAHandler(serverCtx), taskOpts...)
+
+    server.Add(serverCtx.CronServer)
+}
+```
+
+效果：定时到点入队时 `msg.Timeout` 自动写入 yaml 配置的 `Timeout`，handler 收到的 ctx `Deadline = now + Timeout`。改 yaml 即可全局调整所有定时任务的超时上限，无需改代码。
+
+> 默认 3 秒对部分 IO 密集型定时任务偏短，建议在 yaml 中显式配置（如 `Timeout: 30000`）。
+
+#### 投递任务：客户端按任务自定义超时
+
+`Client.Push*` 系列均支持透传 `asynq.Timeout(d)`，由投递方按任务实际耗时按需指定，**不受 30 分钟限制**：
+
+```go
+import "github.com/hibiken/asynq"
+
+// 短任务：5 秒超时
+client.PushJson(ctx, "order-service:send_sms", payload,
+    asynq.Queue("order-service"),
+    asynq.Timeout(5*time.Second))
+
+// 长任务：1 小时超时
+client.PushJson(ctx, "order-service:export_report", payload,
+    asynq.Queue("order-service"),
+    asynq.Timeout(time.Hour))
+```
+
+> 投递方不传 `asynq.Timeout` 时回落到 asynq 默认 30 分钟。生产环境建议每个任务按耗时预算显式设置。
 
 ### 任务分组聚合（Group Aggregation）
 
@@ -543,9 +602,23 @@ func NewServiceContext(c config.Config) *ServiceContext {
 
 ```go
 // internal/handler/workers.go
+import (
+    "time"
+    "github.com/hibiken/asynq"
+)
+
 func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContext) {
-    serverCtx.CronServer.CronAdd("*/1 * * * *", "GDemoA")
-    serverCtx.CronServer.Add("GDemoA", demoA.GDemoAHandler(serverCtx))
+    // 复用 go-zero RestConf.Timeout 接管定时任务超时（参见进阶指南：任务超时控制）
+    var taskOpts []asynq.Option
+    taskOpts = append(taskOpts,
+        asynq.Timeout(time.Duration(serverCtx.Config.Timeout)*time.Millisecond),
+        asynq.MaxRetry(0),
+    )
+
+    // 定时任务：一步完成调度注册 + handler 注册
+    serverCtx.CronServer.CronAdd("*/1 * * * *", "GDemoA",
+        demoA.GDemoAHandler(serverCtx), taskOpts...)
+
     server.Add(serverCtx.CronServer)
 }
 ```
