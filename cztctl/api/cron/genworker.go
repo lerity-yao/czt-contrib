@@ -74,15 +74,21 @@ func workerImports(api *spec.ApiSpec, parentPkg string) []string {
 	addImport(fmt.Sprintf("\"%s%s\"", vars.ProjectOpenSourceURL, "/core/service"))
 	addImport(fmt.Sprintf("\"%s\"", pathx.JoinPackages(parentPkg, contextDir)))
 
+	hasCron := false
 	for _, g := range api.Service.Groups {
 		for _, h := range g.Routes {
 			handlerPath := getHandlerFolderPath(g, h)
 			pkgName := handlerPath[strings.LastIndex(handlerPath, "/")+1:]
 			addImport(fmt.Sprintf("\"%s\"", pathx.JoinPackages(parentPkg, handlerDir, pkgName)))
 			if h.Cron != "" {
-				addImport(fmt.Sprintf("\"%s\"", "github.com/hibiken/asynq"))
+				hasCron = true
 			}
 		}
+	}
+	if hasCron {
+		// time 用于 go-zero RestConf.Timeout (ms) 转 time.Duration
+		addImport("\"time\"")
+		addImport(fmt.Sprintf("\"%s\"", "github.com/hibiken/asynq"))
 	}
 
 	return importNames
@@ -91,6 +97,24 @@ func workerImports(api *spec.ApiSpec, parentPkg string) []string {
 func getWorkerAdditions(api *spec.ApiSpec) []string {
 	var workerAdditionNames []string
 	seen := make(map[string]struct{})
+	hasCron := false
+	for _, g := range api.Service.Groups {
+		for _, h := range g.Routes {
+			if h.Cron != "" {
+				hasCron = true
+				break
+			}
+		}
+		if hasCron {
+			break
+		}
+	}
+	if hasCron {
+		// 多个定时任务共享同一个 Timeout（go-zero RestConf.Timeout 接管），
+		// MaxRetry 依然保留 per-task 配置能力
+		workerAdditionNames = append(workerAdditionNames,
+			"timeoutOpt := asynq.Timeout(time.Duration(serverCtx.Config.Timeout) * time.Millisecond)")
+	}
 	for _, g := range api.Service.Groups {
 		for _, h := range g.Routes {
 			pattern, _ := getHandlerBaseName(h)
@@ -101,19 +125,22 @@ func getWorkerAdditions(api *spec.ApiSpec) []string {
 				handler = strings.Title(handler)
 			}
 
-			addLine := fmt.Sprintf("serverCtx.CronServer.Add(\"%s\", %s.%s(serverCtx))",
-				pattern, pkgName, handler)
-			if _, ok := seen[addLine]; !ok {
-				seen[addLine] = struct{}{}
-				workerAdditionNames = append(workerAdditionNames, addLine)
-			}
 			if h.Cron != "" {
-				retry := h.CronRetry
-				cronLine := fmt.Sprintf("serverCtx.CronServer.CronAdd(\"%s\", \"%s\", asynq.MaxRetry(%d))",
-					h.Cron, pattern, retry)
+				// 定时任务：CronAdd 内部已注册 handler，不再重复调 Add
+				// 超时接管于 go-zero RestConf.Timeout，与 v0.1.0+ cron 模块推荐用法对齐
+				cronLine := fmt.Sprintf("serverCtx.CronServer.CronAdd(\"%s\", \"%s\",\n\t\t%s.%s(serverCtx),\n\t\ttimeoutOpt,\n\t\tasynq.MaxRetry(%d))",
+					h.Cron, pattern, pkgName, handler, h.CronRetry)
 				if _, ok := seen[cronLine]; !ok {
 					seen[cronLine] = struct{}{}
 					workerAdditionNames = append(workerAdditionNames, cronLine)
+				}
+			} else {
+				// 非定时任务（外部投递消费端）：仅注册 handler
+				addLine := fmt.Sprintf("serverCtx.CronServer.Add(\"%s\", %s.%s(serverCtx))",
+					pattern, pkgName, handler)
+				if _, ok := seen[addLine]; !ok {
+					seen[addLine] = struct{}{}
+					workerAdditionNames = append(workerAdditionNames, addLine)
 				}
 			}
 		}

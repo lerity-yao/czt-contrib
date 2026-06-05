@@ -2,6 +2,22 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.7] - 2026-06-04
+
+### 变更
+
+- `cztctl api cron` 生成器适配 [cron v0.1.0](https://github.com/lerity-yao/czt-contrib/blob/main/cron/CHANGELOG.md#010---2026-06-04) 新 API
+  - `CronAdd` 一体化签名：调用时直接传入 handler，内部完成注册 + 调度，不再需要额外 `Add`
+  - 定时任务默认注入 `asynq.Timeout(time.Duration(serverCtx.Config.Timeout) * time.Millisecond)`，超时由 go-zero `RestConf.Timeout` 接管
+  - 多个定时任务时抽取 `timeoutOpt` 局部变量，避免重复书写超时表达式
+  - `MaxRetry` 仍按 per-task `CronRetry` 配置
+  - 非定时任务（外部投递消费端）保持仅注册 handler，不变
+
+### 依赖升级
+
+- `github.com/zeromicro/go-zero` v1.10.1 → v1.10.2
+- `github.com/zeromicro/go-zero/tools/goctl` 保持 v1.10.1（上游未跟版发 v1.10.2）
+
 ## [1.10.6] - 2026-05-27
 
 ### 新增

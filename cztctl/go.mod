@@ -3,6 +3,7 @@ module github.com/lerity-yao/czt-contrib/cztctl
 go 1.24.0
 
 require (
+	github.com/creack/pty v1.1.24
 	github.com/go-openapi/spec v0.21.1-0.20250328170532-a3928469592e
 	github.com/gookit/color v1.6.0
 	github.com/lerity-yao/param-validator v0.0.4
@@ -10,15 +11,14 @@ require (
 	github.com/spf13/pflag v1.0.10
 	github.com/withfig/autocomplete-tools/integrations/cobra v1.2.1
 	github.com/zeromicro/antlr v1.0.0
-	github.com/zeromicro/go-zero v1.10.1
+	github.com/zeromicro/go-zero v1.10.2
 	github.com/zeromicro/go-zero/tools/goctl v1.10.1
-	google.golang.org/grpc v1.79.3
+	google.golang.org/grpc v1.80.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/creack/pty v1.1.24 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/fatih/color v1.18.0 // indirect
