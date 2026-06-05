@@ -2,7 +2,17 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
-## v0.1.4
+## [0.1.5] - 2026-06-04
+
+### 依赖升级
+
+- `github.com/rabbitmq/amqp091-go` v1.10.0 → v1.11.0
+- `github.com/zeromicro/go-zero` v1.10.0 → v1.10.2
+- `go.opentelemetry.io/otel*` v1.24.0 → v1.40.0（主动不升 v1.44+，避免强制要求 go 1.25）
+- 同步 `go mod tidy` 清理无用 indirect 依赖
+- `go` directive 保持 1.24.0
+
+## [0.1.4] - 2026-03-20
 
 ### 破坏性变更
 
@@ -13,7 +23,7 @@
 ```
 **说明**: 与 MustNewListener 保持一致，初始化时不需要 ctx
 
-## v0.1.3
+## [0.1.3] - 2026-03-20
 
 ### 新增功能
 
