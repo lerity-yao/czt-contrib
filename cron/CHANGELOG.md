@@ -2,6 +2,16 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.1.1] - 2026-06-04
+
+### 依赖升级
+
+- `github.com/zeromicro/go-zero` v1.10.0 → v1.10.2
+- `github.com/redis/go-redis/v9` v9.17.3 → v9.20.0
+- 同步 `go mod tidy` 清理无用 indirect 依赖
+- 主动保留 `go.opentelemetry.io/otel*` v1.40.0（v1.44+ 强制要求 go 1.25，为兼容使用方不升）
+- `go` directive 保持 1.24.0
+
 ## [0.1.0] - 2026-06-04
 
 ### 破坏性变更 (Breaking)
