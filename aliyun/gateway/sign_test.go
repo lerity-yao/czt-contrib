@@ -86,7 +86,7 @@ func TestHmacSHA256(t *testing.T) {
 	data := "POST\n*/*\n\napplication/json\n"
 	key := "test-secret"
 
-	got := hmacSHA256(data, key)
+	got := hmacSHA256(data, []byte(key))
 
 	// Independently compute expected value
 	h := hmac.New(sha256.New, []byte(key))
@@ -184,7 +184,7 @@ func TestSignRequest_DefaultHeaders(t *testing.T) {
 		Header: http.Header{},
 	}
 
-	signRequest(r, "appkey", "secret", nil)
+	signRequest(r, "appkey", []byte("secret"), nil)
 
 	if r.Header.Get(headerAccept) != defaultAccept {
 		t.Errorf("Accept = %q, want %q", r.Header.Get(headerAccept), defaultAccept)
@@ -206,7 +206,7 @@ func TestSignRequest_PreservesExistingHeaders(t *testing.T) {
 	r.Header.Set(headerAccept, "application/json")
 	r.Header.Set(headerDate, "Custom Date")
 
-	signRequest(r, "appkey", "secret", nil)
+	signRequest(r, "appkey", []byte("secret"), nil)
 
 	if r.Header.Get(headerAccept) != "application/json" {
 		t.Errorf("Accept should be preserved, got %q", r.Header.Get(headerAccept))
@@ -242,7 +242,7 @@ func TestSignRequest_ContentMD5(t *testing.T) {
 				r.Header.Set(headerContentType, tt.contentType)
 			}
 
-			signRequest(r, "appkey", "secret", tt.body)
+			signRequest(r, "appkey", []byte("secret"), tt.body)
 
 			hasMD5 := r.Header.Get(headerContentMD5) != ""
 			if hasMD5 != tt.wantMD5 {
@@ -260,7 +260,7 @@ func TestSignRequest_CaHeaders(t *testing.T) {
 		Header: http.Header{},
 	}
 
-	signRequest(r, "myappkey", "mysecret", nil)
+	signRequest(r, "myappkey", []byte("mysecret"), nil)
 
 	if r.Header.Get(headerCaKey) != "myappkey" {
 		t.Errorf("X-Ca-Key = %q, want myappkey", r.Header.Get(headerCaKey))
@@ -286,7 +286,7 @@ func TestSignRequest_SignatureHeadersValue(t *testing.T) {
 		Header: http.Header{},
 	}
 
-	signRequest(r, "key", "secret", nil)
+	signRequest(r, "key", []byte("secret"), nil)
 
 	expected := "x-ca-key,x-ca-nonce,x-ca-signature-method,x-ca-timestamp"
 	if r.Header.Get(headerCaSignatureHeaders) != expected {
@@ -310,11 +310,11 @@ func TestSignRequest_SignatureVerifiable(t *testing.T) {
 	appKey := "test-key"
 	appSecret := "test-secret"
 
-	signRequest(r, appKey, appSecret, body)
+	signRequest(r, appKey, []byte(appSecret), body)
 
 	// Recompute signature from the request's final header state
 	sts := buildStringToSign(r)
-	expectedSig := hmacSHA256(sts, appSecret)
+	expectedSig := hmacSHA256(sts, []byte(appSecret))
 
 	if r.Header.Get(headerCaSignature) != expectedSig {
 		t.Errorf("Signature mismatch:\nrequest:    %q\nrecomputed: %q",
@@ -335,8 +335,8 @@ func TestSignRequest_NonceUnique(t *testing.T) {
 		Header: http.Header{},
 	}
 
-	signRequest(r1, "key", "secret", nil)
-	signRequest(r2, "key", "secret", nil)
+	signRequest(r1, "key", []byte("secret"), nil)
+	signRequest(r2, "key", []byte("secret"), nil)
 
 	n1 := r1.Header.Get(headerCaNonce)
 	n2 := r2.Header.Get(headerCaNonce)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 
 	"github.com/zeromicro/go-zero/core/logx"
 	"github.com/zeromicro/go-zero/rest/httpc"
@@ -115,14 +116,26 @@ func Parse(resp *http.Response, err error, val any) error {
 
 // signOption returns an httpc.Option that signs every outgoing request.
 func signOption(c Conf) httpc.Option {
+	appSecret := []byte(c.AppSecret)
 	return func(r *http.Request) *http.Request {
+		ct := r.Header.Get(headerContentType)
+		skipMD5 := strings.HasPrefix(ct, contentTypeForm) || strings.HasPrefix(ct, contentTypeMultipart)
+
 		var bodyBytes []byte
-		if r.Body != nil {
-			bodyBytes, _ = io.ReadAll(r.Body)
-			r.Body.Close()
-			r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		if r.Body != nil && r.Body != http.NoBody {
+			if !skipMD5 || r.GetBody == nil {
+				// Must buffer body: either for MD5 computation, or body is not re-creatable.
+				bodyBytes, _ = io.ReadAll(r.Body)
+				r.Body.Close()
+				if r.GetBody != nil {
+					r.Body, _ = r.GetBody()
+				} else {
+					r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+				}
+			}
+			// else: form/multipart with re-creatable body — skip buffering entirely.
 		}
-		signRequest(r, c.AppKey, c.AppSecret, bodyBytes)
+		signRequest(r, c.AppKey, appSecret, bodyBytes)
 		return r
 	}
 }

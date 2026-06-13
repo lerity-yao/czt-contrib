@@ -2,6 +2,20 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.2] - 2026-06-14
+
+### 优化
+
+- `sortedQuery` 改用 `strings.IndexByte` 零分配遍历，消除 `strings.Split` 的 `[]string` 分配
+- `sortedQuery` 消除冗余 `result` 切片，改用 `strings.Builder` 直接输出；map/slice 预分配容量
+- `signOption` 对 form/multipart body 利用 `GetBody` 跳过全量缓冲，避免大文件上传时的无谓内存拷贝
+- `[]byte(AppSecret)` 在 `NewClient` 时闭包外预算一次，不再每次签名重复转换
+- `strings.Join(signHeaders)` 提升为包级 `signHeadersValue`，只算一次
+
+### 修复
+
+- `signRequest` 中 Date 和 Timestamp 现共享同一次 `time.Now()`，消除跨毫秒边界导致两者不一致的隐患
+
 ## [0.0.1] - 2026-06-13
 
 ### 新增

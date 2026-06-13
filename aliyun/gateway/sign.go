@@ -43,15 +43,21 @@ var signHeaders = []string{
 	"x-ca-timestamp",
 }
 
+// signHeadersValue is the pre-computed comma-joined value of signHeaders,
+// used for the X-Ca-Signature-Headers header.
+var signHeadersValue = strings.Join(signHeaders, ",")
+
 // signRequest populates all required gateway headers and computes the HMAC-SHA256 signature.
 // bodyBytes is the raw request body (may be nil), used for Content-MD5 computation.
-func signRequest(r *http.Request, appKey, appSecret string, bodyBytes []byte) {
+func signRequest(r *http.Request, appKey string, appSecret []byte, bodyBytes []byte) {
+	now := time.Now()
+
 	// Set default headers if not already present.
 	if r.Header.Get(headerAccept) == "" {
 		r.Header.Set(headerAccept, defaultAccept)
 	}
 	if r.Header.Get(headerDate) == "" {
-		r.Header.Set(headerDate, gmtDate())
+		r.Header.Set(headerDate, gmtDate(now))
 	}
 	if r.Header.Get(headerUserAgent) == "" {
 		r.Header.Set(headerUserAgent, defaultUserAgent)
@@ -69,14 +75,14 @@ func signRequest(r *http.Request, appKey, appSecret string, bodyBytes []byte) {
 	r.Header.Set(headerCaKey, appKey)
 	r.Header.Set(headerCaNonce, uuid.New().String())
 	r.Header.Set(headerCaSignatureMethod, defaultSignMethod)
-	r.Header.Set(headerCaTimestamp, millis())
+	r.Header.Set(headerCaTimestamp, millis(now))
 
 	// Build string-to-sign and compute signature.
 	sts := buildStringToSign(r)
 	r.Header.Set(headerCaSignature, hmacSHA256(sts, appSecret))
 
 	// Declare which X-Ca-* headers are signed.
-	r.Header.Set(headerCaSignatureHeaders, strings.Join(signHeaders, ","))
+	r.Header.Set(headerCaSignatureHeaders, signHeadersValue)
 }
 
 // buildStringToSign constructs the canonical string per Alibaba Cloud API Gateway v1 spec:
@@ -129,31 +135,45 @@ func sortedQuery(rawQuery string) string {
 		return ""
 	}
 
-	seen := make(map[string]bool)
+	n := strings.Count(rawQuery, "&") + 1
+	seen := make(map[string]bool, n)
 	type kv struct {
 		key  string
 		sign string
 	}
-	var pairs []kv
+	pairs := make([]kv, 0, n)
 
-	for _, part := range strings.Split(rawQuery, "&") {
-		key, sign := splitQueryPart(part)
-		if seen[key] {
-			continue
+	start := 0
+	for {
+		end := len(rawQuery)
+		if idx := strings.IndexByte(rawQuery[start:], '&'); idx >= 0 {
+			end = start + idx
 		}
-		seen[key] = true
-		pairs = append(pairs, kv{key: key, sign: sign})
+		part := rawQuery[start:end]
+		key, sign := splitQueryPart(part)
+		if !seen[key] {
+			seen[key] = true
+			pairs = append(pairs, kv{key: key, sign: sign})
+		}
+		if end >= len(rawQuery) {
+			break
+		}
+		start = end + 1
 	}
 
 	sort.Slice(pairs, func(i, j int) bool {
 		return pairs[i].key < pairs[j].key
 	})
 
-	result := make([]string, len(pairs))
+	var b strings.Builder
+	b.WriteByte('?')
 	for i, p := range pairs {
-		result[i] = p.sign
+		if i > 0 {
+			b.WriteByte('&')
+		}
+		b.WriteString(p.sign)
 	}
-	return "?" + strings.Join(result, "&")
+	return b.String()
 }
 
 // splitQueryPart splits a "key=value" or "key" query part.
@@ -172,8 +192,8 @@ func splitQueryPart(part string) (key, sign string) {
 }
 
 // hmacSHA256 computes HMAC-SHA256 and returns base64-encoded result.
-func hmacSHA256(data, key string) string {
-	h := hmac.New(sha256.New, []byte(key))
+func hmacSHA256(data string, key []byte) string {
+	h := hmac.New(sha256.New, key)
 	h.Write([]byte(data))
 	return base64.StdEncoding.EncodeToString(h.Sum(nil))
 }
@@ -184,12 +204,12 @@ func md5Hash(data []byte) string {
 	return base64.StdEncoding.EncodeToString(h[:])
 }
 
-// millis returns the current time in milliseconds as a string.
-func millis() string {
-	return strconv.FormatInt(time.Now().UnixMilli(), 10)
+// millis returns the given time in milliseconds as a string.
+func millis(now time.Time) string {
+	return strconv.FormatInt(now.UnixMilli(), 10)
 }
 
-// gmtDate returns the current time in HTTP GMT date format.
-func gmtDate() string {
-	return time.Now().UTC().Format(http.TimeFormat)
+// gmtDate returns the given time in HTTP GMT date format.
+func gmtDate(now time.Time) string {
+	return now.UTC().Format(http.TimeFormat)
 }
