@@ -20,6 +20,8 @@ czt-contrib/
 ├── mq/               # 消息队列模块
 │   └── rabbitmq/     # RabbitMQ 实现
 ├── cron/             # 分布式任务队列模块
+├── aliyun/           # 阿里云组件模块
+│   └── gateway/     # API 网关客户端
 ├── go.mod            # Go 模块定义
 ├── go.sum            # Go 依赖校验
 └── main.go           # 示例入口文件
@@ -111,3 +113,15 @@ czt-contrib/
 - 支持 cztctl 一键生成定时任务服务代码
 
 详情请参见：[cron/README.md](./cron/README.md)
+
+### 阿里云 API 网关客户端 (aliyun/gateway)
+
+基于 go-zero httpc 封装的阿里云 API 网关 Go 客户端，自动完成 HMAC-SHA256 v1 签名。
+
+**核心能力**：
+- 自动注入 `X-Ca-*` 签名头，调用方无感知
+- `Do`/`DoRaw` 双方法：结构化请求 + 原始字节请求
+- `MultipartBuilder` 链式构造文件上传
+- 底层集成 go-zero 熔断器，同一 Host 自动共享
+
+详情请参见：[aliyun/gateway/README.md](./aliyun/gateway/README.md)
