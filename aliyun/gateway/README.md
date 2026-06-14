@@ -231,6 +231,9 @@ ct, body, err := gateway.NewMultipart().
     Field("description", "avatar").
     File("file", "test.png", fileBytes).
     Build()
+if err != nil {
+    return err
+}
 
 resp, err := client.DoRaw(ctx, http.MethodPost, "/upload", ct, body)
 defer resp.Body.Close()
