@@ -10,6 +10,7 @@ import (
 type MultipartBuilder struct {
 	writer *multipart.Writer
 	buf    *bytes.Buffer
+	err    error
 }
 
 // NewMultipart creates a new MultipartBuilder.
@@ -23,22 +24,42 @@ func NewMultipart() *MultipartBuilder {
 
 // Field adds a text field to the multipart form.
 func (b *MultipartBuilder) Field(name, value string) *MultipartBuilder {
-	b.writer.WriteField(name, value)
+	if b.err != nil {
+		return b
+	}
+	if err := b.writer.WriteField(name, value); err != nil {
+		b.err = err
+	}
 	return b
 }
 
 // File adds a file field to the multipart form.
 // Internally uses multipart.Writer.CreateFormFile.
 func (b *MultipartBuilder) File(name, filename string, content []byte) *MultipartBuilder {
-	part, _ := b.writer.CreateFormFile(name, filename)
-	part.Write(content)
+	if b.err != nil {
+		return b
+	}
+	part, err := b.writer.CreateFormFile(name, filename)
+	if err != nil {
+		b.err = err
+		return b
+	}
+	if _, err := part.Write(content); err != nil {
+		b.err = err
+	}
 	return b
 }
 
 // Build finalizes the multipart body.
-// Returns the Content-Type header value and body bytes, ready to pass to DoRaw.
+// Returns the Content-Type header value, body bytes, and any error encountered
+// during Field/File operations or writer.Close().
 // Must be called exactly once.
-func (b *MultipartBuilder) Build() (contentType string, body []byte) {
-	b.writer.Close()
-	return b.writer.FormDataContentType(), b.buf.Bytes()
+func (b *MultipartBuilder) Build() (contentType string, body []byte, err error) {
+	if b.err != nil {
+		return "", nil, b.err
+	}
+	if err := b.writer.Close(); err != nil {
+		return "", nil, err
+	}
+	return b.writer.FormDataContentType(), b.buf.Bytes(), nil
 }

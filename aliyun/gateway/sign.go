@@ -73,7 +73,7 @@ func signRequest(r *http.Request, appKey string, appSecret []byte, bodyBytes []b
 
 	// Set mandatory X-Ca-* headers.
 	r.Header.Set(headerCaKey, appKey)
-	r.Header.Set(headerCaNonce, uuid.New().String())
+	r.Header.Set(headerCaNonce, uuid.NewString())
 	r.Header.Set(headerCaSignatureMethod, defaultSignMethod)
 	r.Header.Set(headerCaTimestamp, millis(now))
 

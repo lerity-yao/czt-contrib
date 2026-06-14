@@ -2,6 +2,17 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [0.0.3] - 2026-06-14
+
+### 修复
+
+- `MultipartBuilder.File` 忽略 `CreateFormFile` 错误可能导致 nil panic，改为错误积累模式
+- `MultipartBuilder.Build()` 签名变更为 `(contentType string, body []byte, err error)`，统一返回构建过程中的错误
+
+### 优化
+
+- `uuid.New().String()` 替换为 `uuid.NewString()`，减少中间 UUID 结构体分配
+
 ## [0.0.2] - 2026-06-14
 
 ### 优化

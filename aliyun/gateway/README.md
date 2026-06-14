@@ -71,7 +71,7 @@ go get github.com/lerity-yao/czt-contrib/aliyun/gateway
 |------|------|
 | `Field(name, value string)` | 添加文本字段 |
 | `File(name, filename string, content []byte)` | 添加文件字段 |
-| `Build() (contentType string, body []byte)` | 返回 Content-Type 和 body，可直接传入 `DoRaw` |
+| `Build() (contentType string, body []byte, err error)` | 返回 Content-Type、body 和错误，可直接传入 `DoRaw` |
 
 > HTTP 方法请直接使用标准库 `http.MethodGet`、`http.MethodPost` 等。
 
@@ -227,7 +227,7 @@ defer resp.Body.Close()
 
 ```go
 // 3. 文件上传（multipart）— 使用 MultipartBuilder
-ct, body := gateway.NewMultipart().
+ct, body, err := gateway.NewMultipart().
     Field("description", "avatar").
     File("file", "test.png", fileBytes).
     Build()
