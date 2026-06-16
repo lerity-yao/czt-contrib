@@ -123,11 +123,19 @@ func DoGenSDK(proto, repo, repoUser, repoToken, remote, branch, style string, mu
 		return err
 	}
 
-	// Step 7: compute relative proto path
+	// Step 6.5: generate .kong.proto in _sdk/ (same dir as copied proto)
 	relProtoPath, err := filepath.Rel(projectRoot, protoAbsPath)
 	if err != nil {
 		return fmt.Errorf("failed to compute relative proto path: %w", err)
 	}
+	sdkProtoAbsPath := filepath.Join(sdkDir, relProtoPath)
+	kongPath, err := GenerateKongProto(sdkProtoAbsPath)
+	if err != nil {
+		return fmt.Errorf("failed to generate kong proto: %w", err)
+	}
+	fmt.Println(color.Green.Render(fmt.Sprintf("generated kong proto -> %s", kongPath)))
+
+	// Step 7: relative proto path already computed in step 6.5
 
 	// Step 8: run goctl rpc protoc
 	goctlCmd := fmt.Sprintf("goctl rpc protoc %s --zrpc_out=. --go_out=./client/pb --go-grpc_out=./client/pb --style=%s", relProtoPath, style)

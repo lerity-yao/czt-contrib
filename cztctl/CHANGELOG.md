@@ -2,6 +2,18 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.8] - 2026-06-16
+
+### 新增
+
+- `cztctl rpc sdk` 自动生成 `.kong.proto` 文件（Kong gRPC-gateway HTTP 注解）
+  - 执行 `cztctl rpc sdk` 时自动在 `_sdk/` 目录中生成与 proto 同名的 `.kong.proto` 变体
+  - 自动添加 `import "google/api/annotations.proto"`
+  - 为每个 rpc 方法生成 `option (google.api.http)` 注解
+  - 路径规则：`/{ServiceName}/{RpcMethodName}`
+  - HTTP 方法统一 POST + `body: "*"`
+  - 若 proto 已包含 annotations import 则跳过插入
+
 ## [1.10.7] - 2026-06-04
 
 ### 变更

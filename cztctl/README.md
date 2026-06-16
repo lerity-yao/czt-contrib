@@ -447,10 +447,44 @@ cztctl rpc sdk --proto proto/order.proto --repo https://gitlab.ddtz.com/rpc-sdk/
 2. 清理旧客户端代码
 3. 初始化 go.mod（若不存在）
 4. 递归复制 proto 文件（包含依赖 proto）
-5. 调用 goctl 生成客户端代码
-6. 清理服务端代码（仅保留 client/ 目录）
-7. `go mod tidy` 整理依赖
-8. Git 提交、打标签、推送到远程仓库
+5. 自动生成 `.kong.proto`（Kong gRPC-gateway HTTP 注解变体）
+6. 调用 goctl 生成客户端代码
+7. 清理服务端代码（仅保留 client/ 目录）
+8. `go mod tidy` 整理依赖
+9. Git 提交、打标签、推送到远程仓库
+
+### Kong gRPC-gateway Proto 自动生成
+
+执行 `cztctl rpc sdk` 时，会自动在 `_sdk/` 目录中生成与 proto 同名的 `.kong.proto` 文件，用于 Kong 网关的 gRPC-gateway 路由配置。
+
+**生成规则：**
+
+- 自动添加 `import "google/api/annotations.proto"`
+- 为每个 rpc 方法生成 `option (google.api.http)` 注解
+- HTTP 路径：`/{ServiceName}/{RpcMethodName}`
+- HTTP 方法统一为 `POST`，附带 `body: "*"`
+
+**示例：**
+
+原始 `vehicle.proto`：
+
+```proto
+service SfVehicle {
+  rpc SfTaskCreate(SfTaskCreateReq) returns (SfTaskCreateRes);
+}
+```
+
+生成的 `vehicle.kong.proto`：
+
+```proto
+import "google/api/annotations.proto";
+
+service SfVehicle {
+  rpc SfTaskCreate(SfTaskCreateReq) returns (SfTaskCreateRes) {
+    option (google.api.http) = { post: "/SfVehicle/SfTaskCreate" body: "*" };
+  }
+}
+```
 
 ### 版本号规则
 
