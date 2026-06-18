@@ -2,6 +2,24 @@
 
 ## 项目概述
 
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![GitHub tag](https://img.shields.io/github/tag/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/tags)
+[![GitHub stars](https://img.shields.io/github/stars/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/stargazers)
+
+## 子模块质量报告
+
+| 模块 | Go Report Card | Go Reference | goproxy.cn |
+|------|-----------------|--------------|------------|
+| [aliyun/gateway](./aliyun/gateway) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/aliyun/gateway)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/aliyun/gateway) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/aliyun/gateway.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/aliyun/gateway) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/gateway/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/gateway/badges/download-count.svg) |
+| [aliyun/oss](./aliyun/oss) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/aliyun/oss)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/aliyun/oss) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/aliyun/oss.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/aliyun/oss) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/oss/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/oss/badges/download-count.svg) |
+| [configcenter/consul](./configcenter/consul) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/configcenter/consul)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/configcenter/consul) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/configcenter/consul.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/configcenter/consul) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/configcenter/consul/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/configcenter/consul/badges/download-count.svg) |
+| [registercenter/consul](./registercenter/consul) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/registercenter/consul)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/registercenter/consul) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/registercenter/consul.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/registercenter/consul) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/registercenter/consul/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/registercenter/consul/badges/download-count.svg) |
+| [snake](./snake) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/snake)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/snake) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/snake.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/snake) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/snake/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/snake/badges/download-count.svg) |
+| [mq/rabbitmq](./mq/rabbitmq) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/mq/rabbitmq)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/mq/rabbitmq) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/mq/rabbitmq.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/mq/rabbitmq) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/mq/rabbitmq/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/mq/rabbitmq/badges/download-count.svg) |
+| [cron](./cron) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/cron)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/cron) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/cron.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/cron) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cron/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cron/badges/download-count.svg) |
+| [cztctl](./cztctl) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/cztctl)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/cztctl) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/cztctl.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/cztctl) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cztctl/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cztctl/badges/download-count.svg) |
+| [kong/hmacauth](./kong/hmacauth) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/kong/hmacauth)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/kong/hmacauth) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/kong/hmacauth.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/kong/hmacauth) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/kong/hmacauth/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/kong/hmacauth/badges/download-count.svg) |
+
 czt-contrib 是一个专注于微服务治理的 Go 语言组件库，提供了服务注册中心、配置中心、分布式 ID 生成器、消息队列、定时任务等核心功能模块。该项目采用 Go 语言开发，兼容 go-zero 微服务框架，旨在为分布式系统提供一套完整的基础组件解决方案。
 
 所有组件都能完美的嵌入到 go-zero 微服务框架中，提供一站式微服务治理解决方案。
@@ -22,6 +40,8 @@ czt-contrib/
 ├── cron/             # 分布式任务队列模块
 ├── aliyun/           # 阿里云组件模块
 │   └── gateway/     # API 网关客户端
+├── kong/             # Kong 组件模块
+│   └── hmacauth/    # Kong HMAC Auth 客户端
 ├── go.mod            # Go 模块定义
 ├── go.sum            # Go 依赖校验
 └── main.go           # 示例入口文件
@@ -125,3 +145,17 @@ czt-contrib/
 - 底层集成 go-zero 熔断器，同一 Host 自动共享
 
 详情请参见：[aliyun/gateway/README.md](./aliyun/gateway/README.md)
+
+### Kong HMAC Auth 客户端 (kong/hmacauth)
+
+基于 go-zero httpc 封装的 Kong HMAC Auth Go 客户端，自动完成 HMAC 签名，遵循 [Kong HMAC Auth 插件](https://developer.konghq.com/plugins/hmac-auth/) 官方规范。
+
+**核心能力**：
+- 支持 5 种 HMAC 算法：hmac-sha1 / sha224 / sha256 / sha384 / sha512
+- `@request-target` 伪头签名，符合 Kong 3.x 规范
+- 自动注入 Date、User-Agent、Host、Digest 头，空 body 也计算零长度摘要
+- `Do`/`DoRaw` 双方法：结构化请求 + 原始字节请求
+- 可自定义参与签名的 header 列表，默认 `["date", "@request-target"]`
+- 底层集成 go-zero 熔断器，同一 Host 自动共享
+
+详情请参见：[kong/hmacauth/README.md](./kong/hmacauth/README.md)
