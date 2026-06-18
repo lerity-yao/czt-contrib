@@ -2,6 +2,18 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.10] - 2026-06-18
+
+### 修复
+
+- 修复 `cztctl rpc sdk` 生成 `.kong.proto` 时，proto 文件为 CRLF（Windows）换行导致 rpc 行分号未被去除、注解错位的问题
+  - 根因：`strings.Split(data, "\n")` 切行后行尾残留 `\r`，使 `TrimSuffix(";")` 末尾匹配到 `\r` 而非 `;`，分号保留、` {` 错位
+  - 修复：读取时统一将 `\r\n` / `\r` 规范化为 `\n`，从源头消除 `\r` 对后缀判断的干扰
+
+### 变更
+
+- `rpcMethodRe` 正则改用 `returns` 关键字识别 rpc 方法声明，比原 `\(` 括号匹配更语义化（有 returns 才是真正的 rpc 方法）
+
 ## [1.10.9] - 2026-06-18
 
 ### 修复

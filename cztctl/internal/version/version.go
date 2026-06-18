@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	BuildVersion = "1.10.9"
+	BuildVersion = "1.10.10"
 )
 
 // GetGoctlVersion returns BuildVersion

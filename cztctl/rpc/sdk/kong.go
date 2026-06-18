@@ -9,8 +9,14 @@ import (
 )
 
 var (
+	// serviceStartRe matches a service block opening line.
+	// Service name is a proto identifier (\w+); using ".+" would greedily
+	// swallow the opening brace "{".
 	serviceStartRe = regexp.MustCompile(`^service\s+(\w+)\s*\{`)
-	rpcMethodRe    = regexp.MustCompile(`^(\s*)rpc\s+(\w+)\s*\(`)
+	// rpcMethodRe matches an rpc method declaration line by the "returns"
+	// keyword (a real rpc method always has returns), capturing leading
+	// indent and the method name.
+	rpcMethodRe = regexp.MustCompile(`^(\s*)rpc\s+(\w+).*\breturns\b`)
 )
 
 // GenerateKongProto reads a proto file and generates a .kong.proto variant
@@ -21,7 +27,11 @@ func GenerateKongProto(protoPath string) (string, error) {
 		return "", fmt.Errorf("failed to read proto file: %w", err)
 	}
 
-	lines := strings.Split(string(data), "\n")
+	// Normalize line endings: CRLF/CR → LF so a trailing "\r" doesn't
+	// break suffix checks (semicolon, "{", "{}") on rpc lines.
+	content := strings.ReplaceAll(string(data), "\r\n", "\n")
+	content = strings.ReplaceAll(content, "\r", "\n")
+	lines := strings.Split(content, "\n")
 
 	// Check if the import already exists
 	hasAnnotationImport := false
