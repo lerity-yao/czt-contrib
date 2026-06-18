@@ -5,6 +5,8 @@
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![GitHub tag](https://img.shields.io/github/tag/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/tags)
 [![GitHub stars](https://img.shields.io/github/stars/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/stargazers)
+[![GitHub last commit](https://img.shields.io/github/last-commit/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/commits)
+[![Go version](https://img.shields.io/github/go-mod/go-version/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/blob/main/go.mod)
 
 ## 子模块质量报告
 
