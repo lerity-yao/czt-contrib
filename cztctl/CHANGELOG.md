@@ -2,6 +2,14 @@
 
 所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
 
+## [1.10.9] - 2026-06-18
+
+### 修复
+
+- 修复 `cztctl rpc sdk` 生成 `.kong.proto` 时，rpc 行使用 `{}` 空块写法导致注解错位的问题
+  - 原判断 `strings.Contains(line, "{")` 将 `{}` 空块误判为已有开括号，导致 `option (google.api.http)` 注解游离到块外并多出闭合括号
+  - 改为先剥除 `{}` 的闭合括号，再用 `HasSuffix("{")` 判断，覆盖分号 / 开括号 / 空块三种 rpc 行风格
+
 ## [1.10.8] - 2026-06-16
 
 ### 新增
