@@ -73,10 +73,20 @@ func GenerateKongProto(protoPath string) (string, error) {
 				indent := matches[1]
 				rpcName := matches[2]
 
-				// Clean the rpc line: remove trailing whitespace/semicolon, add {
+				// Clean the rpc line: remove trailing whitespace/semicolon,
+				// and normalize the opening brace. The source rpc line may be:
+				//   "rpc Foo(...) returns(...);"   (semicolon style)
+				//   "rpc Foo(...) returns(...) {"  (opening brace style)
+				//   "rpc Foo(...) returns(...) {}" (empty block style)
 				cleanLine := strings.TrimRight(line, " \t")
 				cleanLine = strings.TrimSuffix(cleanLine, ";")
-				if !strings.Contains(cleanLine, "{") {
+				cleanLine = strings.TrimRight(cleanLine, " \t")
+				// A trailing "{}" is an empty block — strip the closing brace
+				// so it becomes an opening brace for the annotation block.
+				if strings.HasSuffix(cleanLine, "{}") {
+					cleanLine = cleanLine[:len(cleanLine)-1]
+				}
+				if !strings.HasSuffix(cleanLine, "{") {
 					cleanLine += " {"
 				}
 
