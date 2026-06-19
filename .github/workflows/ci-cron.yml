@@ -1,0 +1,42 @@
+name: CI / cron
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cron/**'
+      - '.github/workflows/ci-cron.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cron
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: cron/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test with race detector
+        run: go test -race -coverprofile=coverage.txt -timeout=120s .
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: cron/coverage.txt
+          flags: cron
+          name: cron
+          fail_ci_if_error: false
+          verbose: true
