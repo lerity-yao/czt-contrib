@@ -53,6 +53,15 @@ func TestMultipartBuilder_ErrorPropagates(t *testing.T) {
 	}
 }
 
+func TestMultipartBuilder_FileError(t *testing.T) {
+	b := NewMultipart()
+	b.writer = multipart.NewWriter(&failingWriter{})
+	_ = b.File("avatar", "avatar.png", []byte("png"))
+	if b.err == nil {
+		t.Fatal("expected error from failing writer during File")
+	}
+}
+
 type failingWriter struct{}
 
 func (f *failingWriter) Write(p []byte) (int, error) {
