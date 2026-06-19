@@ -26,7 +26,7 @@ jobs:
           cache-dependency-path: cron/go.sum
 
       - name: Build
-        run: go build ./...
+        run: go build $(go list ./... | grep -v '/example')
 
       - name: Test with race detector
         run: go test -race -coverprofile=coverage.txt -timeout=120s .
