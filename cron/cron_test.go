@@ -871,23 +871,12 @@ func TestServer_Start_Stop(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	cs := s.(*CommonServer)
-	// Start in goroutine, Stop immediately after short delay
-	// Use a channel to detect if Start unblocks after Stop
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		cs.Server = nil // prevent actual asynq.Server.Run blocking
-		if err := cs.Scheduler.Start(); err != nil {
-			return
-		}
-	}()
+	// Only test scheduler start/stop — no field writes after goroutines start
+	if err := cs.Scheduler.Start(); err != nil {
+		t.Fatalf("scheduler start: %v", err)
+	}
 	time.Sleep(50 * time.Millisecond)
 	cs.Scheduler.Shutdown()
-	select {
-	case <-done:
-	case <-time.After(3 * time.Second):
-		t.Log("scheduler did not stop in time (acceptable)")
-	}
 }
 
 func TestServer_Add_HandlerExecution(t *testing.T) {
@@ -999,17 +988,19 @@ func TestCommonServer_Start_Stop(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	s := cs.(*CommonServer)
-	// Reproduce Start() code directly (without Run which blocks on OS signal)
-	s.Server = asynq.NewServer(s.redisClientOpts, s.config)
+	// Build and assign Server BEFORE starting any goroutines to avoid race.
+	asynqSrv := asynq.NewServer(s.redisClientOpts, s.config)
+	s.Server = asynqSrv
+	// Start scheduler (non-blocking)
 	if err := s.Scheduler.Start(); err != nil {
 		t.Fatalf("scheduler start error: %v", err)
 	}
-	// Start the asynq server without blocking (use Server.Start, not Run)
-	if err := s.Server.Start(s.Mux); err != nil {
+	// Start asynq server workers (non-blocking, unlike Run)
+	if err := asynqSrv.Start(s.Mux); err != nil {
 		t.Fatalf("server start error: %v", err)
 	}
 	time.Sleep(100 * time.Millisecond)
-	// Use the real Stop() to cover Stop() code lines
+	// Stop covers the Stop() code path
 	cs.Stop()
 }
 
