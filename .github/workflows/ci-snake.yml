@@ -1,0 +1,39 @@
+name: CI / snake
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'snake/**'
+      - '.github/workflows/ci-snake.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: snake
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: snake/go.sum
+
+      - name: Test with race detector
+        run: go test -race -coverprofile=coverage.txt -timeout=60s .
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: snake/coverage.txt
+          flags: snake
+          name: snake
+          fail_ci_if_error: false
+          verbose: true

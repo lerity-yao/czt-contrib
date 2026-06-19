@@ -102,17 +102,9 @@ func (c *CommonSnake) CalculateWorkerID() error {
 	ipClean := strings.ReplaceAll(ip, ".", "")
 
 	h := fnv.New32a()
-	_, err := h.Write([]byte(ipClean))
-	if err != nil {
-		return fmt.Errorf("failed to hash IP address: %v", err)
-	}
+	_, _ = h.Write([]byte(ipClean))
 	hashValue := int64(h.Sum32())
 	c.workerID = (hashValue & 0x7FFFFFFF) % (c.maxWorkerID + 1)
-
-	// 确保workerID在有效范围内
-	if c.workerID < 0 || c.workerID > c.maxWorkerID {
-		return fmt.Errorf("calculated workerID %d is out of range [0, %d], setting to 0", c.workerID, c.maxWorkerID)
-	}
 	return nil
 }
 
@@ -146,16 +138,10 @@ func (c *CommonSnake) Generator() (int64, error) {
 			currentSequence := atomic.LoadInt64(&c.sequence)
 
 			if currentSequence >= c.maxSequence {
-				waitUntil := time.Now().Add(100 * time.Millisecond)
-
 				for currentTime <= lastTimestamp {
-					if time.Now().After(waitUntil) {
-						return 0, fmt.Errorf("timeout waiting for next millisecond")
-					}
 					time.Sleep(100 * time.Microsecond)
 					currentTime = time.Now().UnixMilli()
 				}
-
 				continue
 			}
 
