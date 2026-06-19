@@ -3,9 +3,6 @@ name: CI / aliyun/gateway
 on:
   push:
     branches: [main]
-    paths:
-      - 'aliyun/gateway/**'
-      - '.github/workflows/ci-aliyun-gateway.yml'
   pull_request:
     branches: [main]
     paths:

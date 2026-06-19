@@ -205,6 +205,61 @@ func TestValue_KeyNotFound(t *testing.T) {
 	}
 }
 
+func TestNewConsulSubscriber_InvalidAddress(t *testing.T) {
+	_, err := NewConsulSubscriber(ConsulConf{
+		Host:   "://invalid-url",
+		Scheme: "http",
+		Key:    "test/key",
+		Type:   "yaml",
+	})
+	if err == nil {
+		t.Fatal("expected error for invalid Consul address")
+	}
+}
+
+func TestValue_KVError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	sub, err := NewConsulSubscriber(ConsulConf{
+		Host:   server.URL,
+		Scheme: "http",
+		Key:    "test/key",
+		Type:   "yaml",
+	})
+	if err != nil {
+		t.Fatalf("NewConsulSubscriber error: %v", err)
+	}
+	defer sub.Stop()
+
+	_, err = sub.Value()
+	if err == nil {
+		t.Fatal("expected error when KV returns 500")
+	}
+}
+
+func TestValue_InvalidYAML(t *testing.T) {
+	server := newMockConsulServer(t, "test/key", []byte("{invalid yaml: "))
+
+	sub, err := NewConsulSubscriber(ConsulConf{
+		Host:   server.URL,
+		Scheme: "http",
+		Key:    "test/key",
+		Type:   "yaml",
+	})
+	if err != nil {
+		t.Fatalf("NewConsulSubscriber error: %v", err)
+	}
+	defer sub.Stop()
+
+	_, err = sub.Value()
+	if err == nil {
+		t.Fatal("expected error for invalid YAML content")
+	}
+}
+
 func TestAddListener(t *testing.T) {
 	server := newMockConsulServer(t, "test/key", []byte("name: tom"))
 
