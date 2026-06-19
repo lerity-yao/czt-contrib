@@ -311,6 +311,20 @@ func TestNewSnake_WorkerIDNegative(t *testing.T) {
 	}
 }
 
+// TestNewSnake_BitsOverflow covers Validate() returning error when WorkerIDBits+SequenceBits > 63.
+func TestNewSnake_BitsOverflow(t *testing.T) {
+	conf := Conf{
+		WorkerIDBits: 40,
+		SequenceBits: 30, // 40+30=70 > 63
+		Epoch:        1704067200000,
+		WorkerID:     1,
+	}
+	_, err := NewSnake(conf)
+	if err == nil {
+		t.Fatal("expected error for WorkerIDBits+SequenceBits > 63")
+	}
+}
+
 // TestGenerator_ClockBackwardsSmall covers the small-difference wait-and-retry path.
 // We manipulate the internal timestamp to be slightly in the future.
 func TestGenerator_ClockBackwardsSmall(t *testing.T) {

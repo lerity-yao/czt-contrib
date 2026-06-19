@@ -1,5 +1,7 @@
 package snake
 
+import "errors"
+
 const (
 	defaultWorkerIDBits         = 10
 	defaultSequenceBits         = 12
@@ -31,6 +33,10 @@ func (c *Conf) Validate() error {
 
 	if c.TimeDifference <= 0 {
 		c.TimeDifference = defaultTimeDifference
+	}
+
+	if int(c.WorkerIDBits)+int(c.SequenceBits) > 63 {
+		return errors.New("WorkerIDBits + SequenceBits must not exceed 63")
 	}
 
 	return nil
