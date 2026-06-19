@@ -1,0 +1,9 @@
+coverage:
+  status:
+    project:
+      default:
+        target: auto
+
+flag_management:
+  default_rules:
+    carryforward: true
