@@ -7,6 +7,7 @@
 [![GitHub stars](https://img.shields.io/github/stars/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/stargazers)
 [![GitHub last commit](https://img.shields.io/github/last-commit/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/commits)
 [![Go version](https://img.shields.io/github/go-mod/go-version/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/blob/main/go.mod)
+[![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg)](https://codecov.io/gh/lerity-yao/czt-contrib)
 
 ## 子模块质量报告
 
