@@ -1,5 +1,7 @@
 # Consul注册中心使用文档
 
+[![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=registercenter-consul)](https://codecov.io/gh/lerity-yao/czt-contrib)
+
 ## 1. 项目介绍
 
 本模块提供了基于Consul的服务注册与发现功能，支持自动注册、健康检查、监控和服务发现，适用于微服务架构中服务治理场景。
