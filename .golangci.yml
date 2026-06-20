@@ -1,0 +1,71 @@
+run:
+  timeout: 5m
+  modules-download-mode: readonly
+
+output:
+  formats:
+    - format: colored-line-number
+  sort-results: true
+
+linters:
+  enable:
+    # 核心正确性
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # 代码质量
+    - revive
+    - misspell
+    - durationcheck
+    - prealloc
+    - nilerr
+    - unconvert
+    - exportloopref
+    # import 排序
+    - gci
+
+  disable:
+    - gofmt
+    - goimports
+    - paralleltest
+    - godot
+    - lll
+
+linters-settings:
+  revive:
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+      - name: comment-spacings
+        severity: warning
+        disabled: false
+
+  gci:
+    sections:
+      - standard
+      - default
+      - localmodule
+    skip-generated: true
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment
+
+issues:
+  max-same-issues: 0
+  max-issues-per-linter: 0
+  exclude-rules:
+    # 测试文件允许不检查 error
+    - path: _test\.go
+      linters:
+        - errcheck
+    # example 目录宽松
+    - path: example
+      linters:
+        - errcheck
+        - revive

@@ -1,0 +1,48 @@
+name: Lint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.go'
+      - '.golangci.yml'
+      - '**/go.mod'
+      - '.github/workflows/ci-lint.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '**.go'
+      - '.golangci.yml'
+      - '**/go.mod'
+      - '.github/workflows/ci-lint.yml'
+  workflow_dispatch:
+
+jobs:
+  lint:
+    name: Lint ${{ matrix.module }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - cron
+          - snake
+          - configcenter/consul
+          - registercenter/consul
+          - mq/rabbitmq
+          - aliyun/gateway
+          - kong/hmacauth
+          - cztctl
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: ${{ matrix.module }}
+          args: --timeout=5m
