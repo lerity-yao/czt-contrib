@@ -1,6 +1,6 @@
-# czt-contrib 微服务治理组件库
+# czt-contrib
 
-## 项目概述
+> Microservice governance component library for the go-zero ecosystem, production-proven since 2023
 
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![GitHub tag](https://img.shields.io/github/tag/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/tags)
@@ -9,9 +9,35 @@
 [![Go version](https://img.shields.io/github/go-mod/go-version/lerity-yao/czt-contrib.svg)](https://github.com/lerity-yao/czt-contrib/blob/main/go.mod)
 [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg)](https://codecov.io/gh/lerity-yao/czt-contrib)
 
-## 子模块质量报告
+[中文](./readme-cn.md)
 
-| 模块 | Go Report Card | Go Reference | goproxy.cn | Codecov |
+## Background & Motivation
+
+In 2023, the team underwent a thorough architecture overhaul. Faced with rapidly growing business traffic and increasingly complex service topology, we chose go-zero as the microservices foundation—its high performance, low latency, and built-in governance capabilities solidly solved core challenges such as RPC, API gateways, and circuit breaking. However, as the business evolved, we found that the ecosystem around go-zero still needed to be filled in ourselves: service registry, configuration center, message queue, scheduled tasks, distributed ID, Alibaba Cloud gateway integration, Kong HMAC signing… Almost every new project repeated the wheel, with component implementations varying in style and monitoring, tracing, and error governance lacking unified standards. It was against this backdrop that czt-contrib emerged. It is not meant to replace go-zero, but to provide a production-hardened unified layer around go-zero, enabling teams to gain standardized, observable, and governable microservice capabilities with minimal integration cost. Since 2023, these components have been running stably in internal core businesses, withstanding both major promotion traffic and daily iterations.
+
+## Design Philosophy
+
+- **Native go-zero integration**: Configuration, circuit breaker, and tracing seamlessly connect, fitting into existing engineering standards upon adoption.
+- **Standardized observability**: Unified integration with OpenTelemetry and Prometheus, not tied to any specific cloud platform, and pluggable into any observability backend.
+- **Plug and play**: Each sub-module is released independently and ready to use out of the box, avoiding extra glue code and repeated encapsulation.
+- **Generality first**: No dependency on go-zero private APIs; even non-go-zero projects can use them independently as needed.
+
+## Module Overview
+
+| Module | Description | Docs |
+|------|------|------|
+| cztctl | Code generation tool for the component library | [README](./cztctl/README.md) |
+| configcenter/consul | Distributed configuration center based on Consul | [README](./configcenter/consul/README.md) |
+| registercenter/consul | Service registration and discovery based on Consul | [README](./registercenter/consul/README.md) |
+| snake | High-concurrency Snowflake distributed ID generator | [README](./snake/README.md) |
+| mq/rabbitmq | RabbitMQ message queue client | [README](./mq/rabbitmq/README.md) |
+| cron | Distributed task queue based on Redis | [README](./cron/README.md) |
+| aliyun/gateway | Alibaba Cloud API Gateway Go client | [README](./aliyun/gateway/README.md) |
+| kong/hmacauth | Kong HMAC Auth signing client | [README](./kong/hmacauth/README.md) |
+
+## Sub-module Quality Report
+
+| Module | Go Report Card | Go Reference | goproxy.cn | Codecov |
 |------|-----------------|--------------|------------|---------|
 | [aliyun/gateway](./aliyun/gateway) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/aliyun/gateway)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/aliyun/gateway) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/aliyun/gateway.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/aliyun/gateway) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/gateway/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/gateway/badges/download-count.svg) | [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=aliyun-gateway)](https://codecov.io/gh/lerity-yao/czt-contrib) |
 | [aliyun/oss](./aliyun/oss) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/aliyun/oss)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/aliyun/oss) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/aliyun/oss.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/aliyun/oss) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/oss/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/aliyun/oss/badges/download-count.svg) | |
@@ -23,142 +49,184 @@
 | [cztctl](./cztctl) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/cztctl)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/cztctl) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/cztctl.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/cztctl) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cztctl/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cztctl/badges/download-count.svg) | |
 | [kong/hmacauth](./kong/hmacauth) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/kong/hmacauth)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/kong/hmacauth) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/kong/hmacauth.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/kong/hmacauth) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/kong/hmacauth/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/kong/hmacauth/badges/download-count.svg) | [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=kong-hmacauth)](https://codecov.io/gh/lerity-yao/czt-contrib) |
 
-czt-contrib 是一个专注于微服务治理的 Go 语言组件库，提供了服务注册中心、配置中心、分布式 ID 生成器、消息队列、定时任务等核心功能模块。该项目采用 Go 语言开发，兼容 go-zero 微服务框架，旨在为分布式系统提供一套完整的基础组件解决方案。
+## Quick Start
 
-所有组件都能完美的嵌入到 go-zero 微服务框架中，提供一站式微服务治理解决方案。
+Taking `snake` as an example, you can generate a distributed unique ID in just two steps:
 
-## 项目结构
+```bash
+go get github.com/lerity-yao/czt-contrib/snake
+```
+
+```go
+package main
+
+import (
+    "fmt"
+
+    "github.com/lerity-yao/czt-contrib/snake"
+)
+
+func main() {
+    s := snake.MustNewSnake(snake.Conf{
+        WorkerIDBits:   10,
+        SequenceBits:   12,
+        WorkerID:       1,
+    })
+
+    id, _ := s.Generator()
+    fmt.Printf("Generated ID: %d\n", id)
+}
+```
+
+## Project Structure
 
 ```
 czt-contrib/
-├── cztctl/           # 代码生成工具
-├── configcenter/      # 配置中心模块
-│   ├── consul/       # Consul 配置中心实现
-│   └── nacos/        # Nacos 配置中心实现（待实现）
-├── registercenter/   # 服务注册中心模块
-│   └── consul/       # Consul 服务注册实现
-├── snake/            # 分布式 ID 生成器模块
-├── mq/               # 消息队列模块
-│   └── rabbitmq/     # RabbitMQ 实现
-├── cron/             # 分布式任务队列模块
-├── aliyun/           # 阿里云组件模块
-│   └── gateway/     # API 网关客户端
-├── kong/             # Kong 组件模块
-│   └── hmacauth/    # Kong HMAC Auth 客户端
-├── go.mod            # Go 模块定义
-├── go.sum            # Go 依赖校验
-└── main.go           # 示例入口文件
+├── cztctl/           # Code generation tool
+├── configcenter/      # Configuration center module
+│   ├── consul/       # Consul configuration center implementation
+│   └── nacos/        # Nacos configuration center implementation (to be implemented)
+├── registercenter/   # Service registry module
+│   └── consul/       # Consul service registry implementation
+├── snake/            # Distributed ID generator module
+├── mq/               # Message queue module
+│   └── rabbitmq/     # RabbitMQ implementation
+├── cron/             # Distributed task queue module
+├── aliyun/           # Alibaba Cloud component module
+│   └── gateway/     # API Gateway client
+├── kong/             # Kong component module
+│   └── hmacauth/    # Kong HMAC Auth client
+├── go.mod            # Go module definition
+└── go.sum            # Go dependency checksum
 ```
 
-## 功能模块
+## Modules
 
-### 代码生成工具 (cztctl)
+### Code Generation Tool (cztctl)
 
-基于 goctl 魔改的代码生成工具，专为 czt-contrib 组件库设计，支持一键生成 RabbitMQ 消费者服务、Cron 定时任务服务、Swagger 文档等。
+A code generation tool extended based on goctl, designed specifically for the czt-contrib component library. It supports one-click generation of RabbitMQ consumer services, Cron scheduled task services, Swagger documentation, and more.
 
-**核心能力**：
-- `cztctl api rabbitmq` - 根据 .rabbitmq 文件生成 RabbitMQ 消费者服务代码
-- `cztctl api cron` - 根据 .cron 文件生成 Cron 定时任务服务代码
-- `cztctl api swagger` - 根据 .api 文件生成 Swagger API 文档
-- 支持自定义模板，可根据团队规范定制生成代码风格
-- 生成代码自动集成链路追踪、监控指标、错误处理等能力
+**Core Capabilities**:
+- `cztctl api swagger` - Generate Swagger API docs from `.api` files
+- `cztctl api cron` - Generate distributed scheduled task service code from `.cron` files
+- `cztctl api rabbitmq` - Generate RabbitMQ consumer service code from `.rabbitmq` files
+- `cztctl rpc sdk` - Generate RPC client SDK and publish it to an independent Git repository
+- `cztctl env` - View or edit cztctl environment variables
+- Generated code automatically integrates tracing, metrics, error handling, and other capabilities
 
-**IDE 插件**：
-- [cztctl-intellij](https://github.com/lerity-yao/cztctl-intellij) - GoLand/IntelliJ IDEA 语法高亮插件，支持 `.cron`、`.rabbitmq` 文件的语法高亮、代码补全、错误检查
+**IDE Plugins**:
+- [cztctl-intellij](https://github.com/lerity-yao/cztctl-intellij) - GoLand/IntelliJ IDEA syntax highlighting plugin supporting `.cron` and `.rabbitmq` files with syntax highlighting, code completion, and error checking
+- [cztctl-vscode](https://github.com/lerity-yao/cztctl-vscode) - VS Code syntax highlighting plugin supporting `.cron` and `.rabbitmq` files with syntax highlighting, code completion, and error checking
 
-详情请参见：[cztctl/README.md](./cztctl/README.md)
+For details, see [cztctl/README.md](./cztctl/README.md).
 
-### 配置中心 (configcenter)
+### Configuration Center (configcenter)
 
-基于 HashiCorp Consul 实现的分布式配置管理中心，专为 go-zero 框架设计。
+A distributed configuration management center based on HashiCorp Consul, designed for the go-zero framework.
 
-**核心能力**：
-- 基于 Consul KV 存储的配置管理
-- 支持配置热更新，无需重启服务
-- 提供配置变更监听回调，实时响应配置变化
-- 支持多环境配置隔离（dev/test/prod）
-- 与 go-zero 配置体系无缝集成
+**Core Capabilities**:
+- Consul KV-based configuration subscriber with change detection via Long-Polling + Index
+- Supports multiple configuration formats: YAML, HCL, JSON, XML, automatically normalized to JSON
+- Event-driven updates: register callbacks via `AddListener` to be notified automatically on configuration changes
+- Background goroutine continuously listens, with automatic retry on fetch failures (1-second interval)
+- Supports TLS encrypted connections and Token authentication
 
-详情请参见：[configcenter/consul/README.md](./configcenter/consul/README.md)
+For details, see [configcenter/consul/README.md](./configcenter/consul/README.md).
 
-### 服务注册中心 (registercenter)
+### Service Registry (registercenter)
 
-基于 HashiCorp Consul 实现的服务注册与发现中心，专为 go-zero 框架设计。
+A service registration and discovery center based on HashiCorp Consul, designed for the go-zero framework.
 
-**核心能力**：
-- 服务自动注册与发现
-- 多种健康检查机制（TTL、HTTP、gRPC）
-- 服务负载均衡支持
-- 服务下线自动摘除
-- 支持 gRPC 和 HTTP 服务注册
+**Core Capabilities**:
+- Automatic service registration and deregistration, with automatic deregistration on process exit
+- Three health check mechanisms: TTL heartbeat, HTTP endpoint, and gRPC Health protocol
+- Health monitoring and automatic recovery: exponential backoff retry on failures (up to 5 times, 1s→30s), and automatic re-registration when health loss is detected
+- gRPC Resolver-based service discovery: automatically registers the `consul://` scheme, supporting query parameters such as tag/dc/near
+- Container environment adaptation: automatically recognizes the `POD_IP` environment variable, and resolves `0.0.0.0` to the actual IP
 
-详情请参见：[registercenter/consul/README.md](./registercenter/consul/README.md)
+For details, see [registercenter/consul/README.md](./registercenter/consul/README.md).
 
-### 分布式 ID 生成器 (snake)
+### Distributed ID Generator (snake)
 
-基于雪花算法实现的分布式唯一 ID 生成器，适用于高并发场景。
+A distributed unique ID generator based on the Snowflake algorithm, suitable for high-concurrency scenarios.
 
-**核心能力**：
-- 基于雪花算法，生成全局唯一、有序的 64 位 ID
-- 高性能：单节点每秒可生成数百万个 ID
-- 支持自动工作节点 ID 分配（基于 Consul）
-- 内置时钟回拨检测与处理机制
-- ID 可解析，含时间戳、机器标识、序列号
+**Core Capabilities**:
+- Based on a Snowflake algorithm variant, generates globally unique, ordered 64-bit IDs
+- Lock-free design: uses atomic CAS for concurrency safety without locks
+- Configurable bit allocation: WorkerIDBits (default 10) + SequenceBits (default 12), validated to sum ≤ 63
+- Automatic worker node ID allocation: based on FNV hash of the IP address, with manual specification also supported
+- Clock rollback handling: configurable tolerance (default 5ms), rejects generation if exceeded
+- ID parsing: timestamp, worker node ID, and sequence number can be extracted from the ID
 
-详情请参见：[snake/README.md](./snake/README.md)
+For details, see [snake/README.md](./snake/README.md).
 
-### 消息队列 (mq/rabbitmq)
+### Message Queue (mq/rabbitmq)
 
-基于 [RabbitMQ](https://www.rabbitmq.com/) 构建的高性能消息队列客户端，专为 go-zero 框架设计的分布式消息处理模块。
+A high-performance message queue client built on [RabbitMQ](https://www.rabbitmq.com/), a distributed message processing module designed for the go-zero framework.
 
-**核心能力**：
-- 基于 AMQP 0-9-1 协议，支持多种消息模式（Direct、Fanout、Topic）
-- Sender（生产者）：支持同步/异步发送、消息确认、自动重连
-- Listener（消费者）：支持 QoS 控制、手动/自动 ACK、并发消费
-- 集成 OpenTelemetry 分布式链路追踪，生产-消费全链路可观测
-- 内置 Prometheus 指标：发送/消费计数、耗时、字节数等
-- 支持 cztctl 一键生成消费者服务代码
+**Core Capabilities**:
+- Sender (producer): single-connection persistent heartbeat (30s), automatic exponential backoff reconnection on disconnect (max 30s)
+- Listener (consumer): implements the go-zero `queue.MessageQueue` interface, supports QoS prefetch control, manual/auto ACK
+- Integrated OpenTelemetry tracing: Trace Context propagation across services via HeaderCarrier
+- Built-in Prometheus metrics: Sender 5 + Listener 9 (send/consume count, latency, bytes, reconnections, disconnections, in-flight messages, etc.)
+- Interceptor chain: Recovery (panic capture) → Trace → Prometheus → Logging
+- Graceful shutdown: coordinated via go-zero proc, waiting for in-flight messages to be processed
 
-详情请参见：[mq/rabbitmq/README.md](./mq/rabbitmq/README.md)
+For details, see [mq/rabbitmq/README.md](./mq/rabbitmq/README.md).
 
-### 分布式任务队列 (cron)
+### Distributed Task Queue (cron)
 
-基于 [Asynq](https://github.com/hibiken/asynq) 构建的分布式任务队列系统，专为 go-zero 框架设计的定时任务和异步任务处理模块。
+A distributed task queue system built on [Asynq](https://github.com/hibiken/asynq), a scheduled and asynchronous task processing module designed for the go-zero framework.
 
-**核心能力**：
-- 基于 Redis 的高性能分布式任务队列
-- Server（消费者）：支持 Cron 表达式定时任务、并发控制、优先级队列
-- Client（生产者）：支持立即执行、延时执行、定时执行、任务撤回
-- 集成 OpenTelemetry 链路追踪，生产-消费全链路可观测
-- 内置 Prometheus 指标：消费计数、耗时、队列状态、并发数等
-- 自动 panic 恢复，panic 不重试，直接归档
-- 支持多种 Redis 模式（单机、哨兵、集群）
-- 支持 cztctl 一键生成定时任务服务代码
+**Core Capabilities**:
+- Distributed task queue based on [Asynq](https://github.com/hibiken/asynq)
+- Client (producer): supports immediate/delayed/scheduled push, automatic JSON serialization, automatic Trace Context injection
+- Server (consumer): supports Cron expression scheduled tasks, concurrency control (default CPU cores), priority queues
+- Supports multiple Redis modes: standalone, sentinel, cluster, with TLS support
+- Middleware chain: Recovery (panic capture without retry) → Prometheus → Trace
+- Built-in Prometheus metrics: consume count, latency, bytes, active workers, retry count, panic count, etc.
+- Task management: supports task cancellation (CancelTask) and rescheduling (RescheduleTask)
 
-详情请参见：[cron/README.md](./cron/README.md)
+For details, see [cron/README.md](./cron/README.md).
 
-### 阿里云 API 网关客户端 (aliyun/gateway)
+### Alibaba Cloud API Gateway Client (aliyun/gateway)
 
-基于 go-zero httpc 封装的阿里云 API 网关 Go 客户端，自动完成 HMAC-SHA256 v1 签名。
+An Alibaba Cloud API Gateway Go client built on go-zero httpc, automatically completing HMAC-SHA256 v1 signing.
 
-**核心能力**：
-- 自动注入 `X-Ca-*` 签名头，调用方无感知
-- `Do`/`DoRaw` 双方法：结构化请求 + 原始字节请求
-- `MultipartBuilder` 链式构造文件上传
-- 底层集成 go-zero 熔断器，同一 Host 自动共享
+**Core Capabilities**:
+- Automatically completes Alibaba Cloud API Gateway v1 HMAC-SHA256 signing, injecting the full set of `X-Ca-*` headers (Key, Nonce, Timestamp, Signature-Method, Signature-Headers, Signature)
+- `Do` method: structured requests, automatically mapping path/form/json/header tags
+- `DoRaw` method: raw byte requests, suitable for file uploads, XML, plain text, and other scenarios
+- Automatically calculates Content-MD5 (except form/multipart)
+- Underlying integration with go-zero httpc, automatically sharing circuit breakers for the same Host
+- Supports injecting a custom `*http.Client` via `WithClient` (timeout, TLS, connection pool)
 
-详情请参见：[aliyun/gateway/README.md](./aliyun/gateway/README.md)
+For details, see [aliyun/gateway/README.md](./aliyun/gateway/README.md).
 
-### Kong HMAC Auth 客户端 (kong/hmacauth)
+### Kong HMAC Auth Client (kong/hmacauth)
 
-基于 go-zero httpc 封装的 Kong HMAC Auth Go 客户端，自动完成 HMAC 签名，遵循 [Kong HMAC Auth 插件](https://developer.konghq.com/plugins/hmac-auth/) 官方规范。
+A Kong HMAC Auth Go client built on go-zero httpc, automatically completing HMAC signing and following the official [Kong HMAC Auth plugin](https://developer.konghq.com/plugins/hmac-auth/) specification.
 
-**核心能力**：
-- 支持 5 种 HMAC 算法：hmac-sha1 / sha224 / sha256 / sha384 / sha512
-- `@request-target` 伪头签名，符合 Kong 3.x 规范
-- 自动注入 Date、User-Agent、Host、Digest 头，空 body 也计算零长度摘要
-- `Do`/`DoRaw` 双方法：结构化请求 + 原始字节请求
-- 可自定义参与签名的 header 列表，默认 `["date", "@request-target"]`
-- 底层集成 go-zero 熔断器，同一 Host 自动共享
+**Core Capabilities**:
+- Supports 5 HMAC algorithms: hmac-sha1 / sha224 / sha256 / sha384 / sha512
+- `@request-target` pseudo-header signing, compliant with the Kong 3.x official specification
+- Automatically injects Date (RFC 2822 UTC), User-Agent, Host, and Digest headers
+- Digest integrity: includes SHA-256 digest calculation for empty-body scenarios (except form/multipart)
+- `Do`/`DoRaw` dual methods: structured requests + raw byte requests
+- Customizable list of headers participating in signing, default `["date", "@request-target"]`
+- Underlying integration with go-zero httpc, automatically sharing circuit breakers for the same Host
+- Supports injecting a custom `*http.Client` via `WithClient`
 
-详情请参见：[kong/hmacauth/README.md](./kong/hmacauth/README.md)
+For details, see [kong/hmacauth/README.md](./kong/hmacauth/README.md).
+
+## Contributors
+
+Thanks to all the developers who have contributed to this project:
+
+<a href="https://github.com/lerity-yao/czt-contrib/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=lerity-yao/czt-contrib" />
+</a>
+
+## Contributing & License
+
+Contributions via Issues and Pull Requests are welcome. The project is licensed under MIT. For details, see [LICENSE](LICENSE).

@@ -1,41 +1,43 @@
 # CZT-Contrib RabbitMQ Module
 
-基于 [RabbitMQ](https://www.rabbitmq.com/) 构建的高性能消息队列客户端，专为 Go-Zero 框架设计的分布式消息处理模块。
+[中文](./readme-cn.md)
 
-## ✨ 特性
+A high-performance message queue client built on [RabbitMQ](https://www.rabbitmq.com/), designed as a distributed message processing module for the Go-Zero framework.
 
-- 🚀 **高性能**: 基于 AMQP 协议的高性能消息队列
-- 🔗 **链路追踪**: 集成 OpenTelemetry 分布式链路追踪
-- 📊 **监控指标**: 内置 Prometheus 指标收集（Sender 5个 + Listener 9个）
-- 🛡️ **错误恢复**: 自动重连和错误处理机制
-- 🔄 **消息确认**: 支持可靠的消息确认机制
-- ⚡ **并发控制**: 灵活的 QoS 配置和并发控制
-- 🔧 **配置灵活**: 支持多种消息模式和队列配置
-- 🔌 **连接可靠**: 支持自动重连、NotifyClose 监听、优雅停机
+## ✨ Features
+
+- 🚀 **High Performance**: High-performance message queue based on the AMQP protocol
+- 🔗 **Distributed Tracing**: Integrated OpenTelemetry distributed tracing
+- 📊 **Metrics**: Built-in Prometheus metrics collection (5 Sender + 9 Listener metrics)
+- 🛡️ **Error Recovery**: Automatic reconnection and error handling mechanism
+- 🔄 **Message Acknowledgment**: Supports reliable message acknowledgment
+- ⚡ **Concurrency Control**: Flexible QoS configuration and concurrency control
+- 🔧 **Flexible Configuration**: Supports multiple message patterns and queue configurations
+- 🔌 **Reliable Connection**: Supports automatic reconnection, NotifyClose listener, and graceful shutdown
 
 ---
 
-## 📦 安装
+## 📦 Installation
 
 ```bash
 go get github.com/lerity-yao/czt-contrib/mq/rabbitmq
 ```
 
-## 📦 服务生成
+## 📦 Service Generation
 
-支持类似 goctl 工具一键生成服务端代码， 工具为 cztctl, 是 goctl 魔改的
+Supports one-click server code generation similar to the goctl tool. The tool is `cztctl`, a customized version of goctl.
 
-也可以自定义服务端代码生成模板
+You can also customize the server code generation templates.
 
-请参考 [cztctl](https://github.com/lerity-yao/czt-contrib/blob/main/cztctl/README.md)
+Please refer to [cztctl](https://github.com/lerity-yao/czt-contrib/blob/main/cztctl/README.md).
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 生产者（客户端）使用
+### 1. Producer (Client) Usage
 
-#### go-zero 框架中使用（推荐）
+#### Using in the go-zero Framework (Recommended)
 
-在 `svc/servicecontext.go` 中初始化 Sender，自动通过 `proc.AddShutdownListener` 优雅停机：
+Initialize the Sender in `svc/servicecontext.go`; graceful shutdown is handled automatically via `proc.AddShutdownListener`:
 
 ```go
 // internal/config/config.go
@@ -82,9 +84,9 @@ func (l *XxxLogic) Xxx() error {
 }
 ```
 
-#### 非 go-zero 框架使用
+#### Using Outside the go-zero Framework
 
-需要手动调用 `Close()` 关闭连接：
+You need to call `Close()` manually to close the connection:
 
 ```go
 package main
@@ -126,11 +128,11 @@ func main() {
 }
 ```
 
-### 2. 消费者（服务端）使用
+### 2. Consumer (Server) Usage
 
-消费者仅支持在 go-zero 框架中使用，推荐使用 `cztctl` 工具生成代码。
+Consumers are only supported in the go-zero framework. It is recommended to generate code with the `cztctl` tool.
 
-**目录结构**：
+**Directory Structure**:
 ```
 ├── etc/
 │   └── demoa.yaml
@@ -148,7 +150,7 @@ func main() {
 └── demoa.go
 ```
 
-**配置文件** `etc/demoa.yaml`：
+**Configuration File** `etc/demoa.yaml`:
 ```yaml
 Name: demoA
 Host: 127.0.0.1
@@ -162,7 +164,7 @@ GDemoARabbitmqConf:
     - Name: queue.demoa
 ```
 
-**配置结构** `internal/config/config.go`：
+**Configuration Struct** `internal/config/config.go`:
 ```go
 package config
 
@@ -177,7 +179,7 @@ type Config struct {
 }
 ```
 
-**Handler 注册** `internal/handler/listeners.go`：
+**Handler Registration** `internal/handler/listeners.go`:
 ```go
 package handler
 
@@ -192,7 +194,7 @@ func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContex
 }
 ```
 
-**Handler 实现** `internal/handler/demoA/gdemoahandler.go`：
+**Handler Implementation** `internal/handler/demoA/gdemoahandler.go`:
 ```go
 package demoA
 
@@ -213,7 +215,7 @@ func GDemoAHandler(svcCtx *svc.ServiceContext) service.Service {
 }
 ```
 
-**业务逻辑** `internal/logic/demoA/gdemoalogic.go`：
+**Business Logic** `internal/logic/demoA/gdemoalogic.go`:
 ```go
 package demoA
 
@@ -244,7 +246,7 @@ func (l *GDemoALogic) GDemoA(message []byte) error {
 }
 ```
 
-**主函数** `demoa.go`：
+**Main Function** `demoa.go`:
 ```go
 package main
 
@@ -283,20 +285,20 @@ func main() {
 }
 ```
 
-## ⚙️ 配置说明
+## ⚙️ Configuration
 
-### 1. Sender 配置 (RabbitSenderConf)
+### 1. Sender Configuration (RabbitSenderConf)
 
-| 字段 | 类型 | 默认值 | 说明 |
+| Field | Type | Default | Description |
 |--------|------|--------|------|
-| Username | string | - | RabbitMQ 账号 |
-| Password | string | - | RabbitMQ 密码 |
-| Host | string | - | RabbitMQ 地址 |
-| Port | int | - | RabbitMQ 端口 |
-| VHost | string | "" | 虚拟主机（可选） |
-| ContentType | string | text/plain | 消息内容类型 |
+| Username | string | - | RabbitMQ username |
+| Password | string | - | RabbitMQ password |
+| Host | string | - | RabbitMQ host |
+| Port | int | - | RabbitMQ port |
+| VHost | string | "" | Virtual host (optional) |
+| ContentType | string | text/plain | Message content type |
 
-**YAML 配置示例**：
+**YAML Configuration Example**:
 ```yaml
 RabbitMqSenderConf:
   Username: guest
@@ -307,40 +309,40 @@ RabbitMqSenderConf:
   ContentType: application/json
 ```
 
-### 2. Listener 配置 (RabbitListenerConf)
+### 2. Listener Configuration (RabbitListenerConf)
 
-#### 基础配置
+#### Basic Configuration
 
-| 字段 | 类型 | 默认值 | 说明 |
+| Field | Type | Default | Description |
 |--------|------|--------|------|
-| Username | string | - | RabbitMQ 账号 |
-| Password | string | - | RabbitMQ 密码 |
-| Host | string | - | RabbitMQ 地址 |
-| Port | int | - | RabbitMQ 端口 |
-| VHost | string | "" | 虚拟主机（可选） |
-| ContentType | string | text/plain | 消息内容类型 |
-| ListenerQueues | []ConsumerConf | - | 监听队列配置列表 |
-| ChannelQos | ChannelQosConf | - | 通道 QoS 配置 |
+| Username | string | - | RabbitMQ username |
+| Password | string | - | RabbitMQ password |
+| Host | string | - | RabbitMQ host |
+| Port | int | - | RabbitMQ port |
+| VHost | string | "" | Virtual host (optional) |
+| ContentType | string | text/plain | Message content type |
+| ListenerQueues | []ConsumerConf | - | List of listening queue configurations |
+| ChannelQos | ChannelQosConf | - | Channel QoS configuration |
 
-#### 队列消费配置 (ConsumerConf)
+#### Queue Consumer Configuration (ConsumerConf)
 
-| 字段 | 类型 | 默认值 | 说明 |
+| Field | Type | Default | Description |
 |--------|------|--------|------|
-| Name | string | - | 队列名称 |
-| AutoAck | bool | false | 自动确认。true=投递时自动确认（消息立即删除）；false=框架在消费完成后 ACK |
-| Exclusive | bool | false | 独占模式。true=只允许当前消费者连接此队列 |
-| NoLocal | bool | false | 禁止本地消费（RabbitMQ 不支持） |
-| NoWait | bool | false | 非阻塞模式。true=不等待服务器响应 |
+| Name | string | - | Queue name |
+| AutoAck | bool | false | Auto acknowledgment. true = auto-ack on delivery (message deleted immediately); false = framework ACK after consumption completes |
+| Exclusive | bool | false | Exclusive mode. true = only the current consumer can connect to this queue |
+| NoLocal | bool | false | Prohibit local consumption (not supported by RabbitMQ) |
+| NoWait | bool | false | Non-blocking mode. true = do not wait for server response |
 
-#### 通道 QoS 配置 (ChannelQosConf)
+#### Channel QoS Configuration (ChannelQosConf)
 
-| 字段 | 类型 | 默认值 | 说明 |
+| Field | Type | Default | Description |
 |--------|------|--------|------|
-| PrefetchCount | int | 5 | 预取消息数量。未确认消息达到此上限时，RabbitMQ 停止投递新消息 |
-| PrefetchSize | int | 0 | 预取消息总字节大小。0=不限制 |
-| Global | bool | false | QoS 生效范围。false=仅当前消费者；true=影响所有消费者 |
+| PrefetchCount | int | 5 | Number of prefetched messages. RabbitMQ stops delivering new messages when unacknowledged messages reach this limit |
+| PrefetchSize | int | 0 | Total prefetched message size in bytes. 0 = unlimited |
+| Global | bool | false | QoS scope. false = current consumer only; true = affects all consumers |
 
-**YAML 配置示例**：
+**YAML Configuration Example**:
 ```yaml
 GDemoARabbitmqConf:
   Username: guest
@@ -360,103 +362,103 @@ GDemoARabbitmqConf:
     Global: false
 ```
 
-## 🔧 高级功能
+## 🔧 Advanced Features
 
-### 1. 链路追踪
+### 1. Distributed Tracing
 
-模块自动集成 OpenTelemetry，支持分布式链路追踪：
+The module integrates OpenTelemetry out of the box and supports distributed tracing:
 
-- **生产者端**: 自动创建生产者 Span
-- **消费者端**: 从消息头提取追踪信息
-- **跨服务追踪**: 支持跨多个服务的完整调用链
+- **Producer Side**: Automatically creates producer spans
+- **Consumer Side**: Extracts trace information from message headers
+- **Cross-Service Tracing**: Supports complete call chains across multiple services
 
-### 2. 监控指标
+### 2. Metrics
 
-内置 Prometheus 指标收集：
+Built-in Prometheus metrics collection:
 
-**Sender 指标**：
-- `rabbitmq_sender_send_total`: 消息发送总数 (exchange, route_key, status)
-- `rabbitmq_sender_send_duration_ms`: 消息发送耗时 (exchange, route_key)
-- `rabbitmq_sender_send_size_bytes`: 消息发送大小 (exchange, route_key)
-- `rabbitmq_sender_reconnect_total`: 重连次数
-- `rabbitmq_sender_disconnect_total`: 掉线次数
+**Sender Metrics**:
+- `rabbitmq_sender_send_total`: Total messages sent (exchange, route_key, status)
+- `rabbitmq_sender_send_duration_ms`: Message send duration (exchange, route_key)
+- `rabbitmq_sender_send_size_bytes`: Message send size (exchange, route_key)
+- `rabbitmq_sender_reconnect_total`: Number of reconnections
+- `rabbitmq_sender_disconnect_total`: Number of disconnections
 
-**Listener 指标**：
-- `rabbitmq_listener_consume_total`: 消息消费总数 (queue, status)
-- `rabbitmq_listener_consume_duration_ms`: 消息消费耗时 (queue)
-- `rabbitmq_listener_consume_size_bytes`: 消息消费大小 (queue)
-- `rabbitmq_listener_in_flight`: 当前处理中消息数 (queue)
-- `rabbitmq_listener_parse_error_total`: 解析失败数 (queue)
-- `rabbitmq_listener_panic_total`: Panic 次数 (queue)
-- `rabbitmq_listener_ack_total`: ACK/Reject 计数 (queue, type)
-- `rabbitmq_listener_reconnect_total`: 重连次数
-- `rabbitmq_listener_disconnect_total`: 掉线次数
+**Listener Metrics**:
+- `rabbitmq_listener_consume_total`: Total messages consumed (queue, status)
+- `rabbitmq_listener_consume_duration_ms`: Message consumption duration (queue)
+- `rabbitmq_listener_consume_size_bytes`: Message consumption size (queue)
+- `rabbitmq_listener_in_flight`: Number of messages currently being processed (queue)
+- `rabbitmq_listener_parse_error_total`: Number of parse failures (queue)
+- `rabbitmq_listener_panic_total`: Number of panics (queue)
+- `rabbitmq_listener_ack_total`: ACK/Reject count (queue, type)
+- `rabbitmq_listener_reconnect_total`: Number of reconnections
+- `rabbitmq_listener_disconnect_total`: Number of disconnections
 
-### 3. 内置拦截器
+### 3. Built-in Interceptors
 
-模块提供以下内置拦截器：
+The module provides the following built-in interceptors:
 
-- **RecoveryInterceptor**: 自动 panic 恢复
-- **TraceInterceptor**: 链路追踪
-- **PrometheusInterceptor**: 指标收集
-- **LoggingInterceptor**: 日志记录
-
-
-## 🏆 最佳实践
-
-### 1. 消息设计
-
-- **消息格式**: 使用 JSON 格式，便于序列化和调试
-- **消息大小**: 控制消息大小，避免大消息影响性能
-- **幂等性**: 确保消息处理是幂等的，支持重试
-
-### 2. 队列配置
-
-- **持久化**: 重要消息应设置持久化队列
-- **死信队列**: 配置死信队列处理失败消息
-- **TTL**: 设置合理的消息过期时间
-
-### 3. 错误处理
-
-- **重试机制**: 合理配置重试次数和间隔
-- **死信处理**: 处理无法重试成功的消息
-- **监控告警**: 设置消息积压和失败告警
-
-### 4. 性能优化
-
-- **QoS 配置**: 根据业务需求调整预取数量
-- **并发控制**: 合理设置消费者并发数
-- **连接复用**: 复用连接和通道，减少开销
-
-## 🔍 故障排除
-
-### 常见问题
-
-1. **连接失败**
-    - 检查 RabbitMQ 服务状态
-    - 验证网络连接和防火墙设置
-    - 确认用户名密码和权限
-
-2. **消息丢失**
-    - 确认消息持久化设置
-    - 检查消费者确认机制
-    - 验证死信队列配置
-
-3. **性能问题**
-    - 调整 QoS 预取设置
-    - 优化消息大小和格式
-    - 增加消费者实例
+- **RecoveryInterceptor**: Automatic panic recovery
+- **TraceInterceptor**: Distributed tracing
+- **PrometheusInterceptor**: Metrics collection
+- **LoggingInterceptor**: Logging
 
 
-## 🤝 贡献
+## 🏆 Best Practices
 
-欢迎提交 Issue 和 Pull Request！
+### 1. Message Design
 
-## 📞 联系方式
+- **Message Format**: Use JSON for easy serialization and debugging
+- **Message Size**: Keep message sizes under control to avoid performance impact
+- **Idempotency**: Ensure message processing is idempotent and supports retries
 
-- 项目主页: [GitHub](https://github.com/lerity-yao/czt-contrib)
-- 问题反馈: [Issues](https://github.com/lerity-yao/czt-contrib/issues)
+### 2. Queue Configuration
 
-## 📋 更新日志
+- **Durability**: Important messages should use durable queues
+- **Dead Letter Queue**: Configure dead-letter queues to handle failed messages
+- **TTL**: Set reasonable message expiration times
 
-查看 [CHANGELOG.md](./CHANGELOG.md)
+### 3. Error Handling
+
+- **Retry Mechanism**: Configure retry counts and intervals reasonably
+- **Dead Letter Handling**: Handle messages that cannot be retried successfully
+- **Monitoring and Alerting**: Set up alerts for message backlog and failures
+
+### 4. Performance Optimization
+
+- **QoS Configuration**: Adjust prefetch counts based on business requirements
+- **Concurrency Control**: Set consumer concurrency appropriately
+- **Connection Reuse**: Reuse connections and channels to reduce overhead
+
+## 🔍 Troubleshooting
+
+### Common Issues
+
+1. **Connection Failure**
+    - Check RabbitMQ service status
+    - Verify network connectivity and firewall settings
+    - Confirm username, password, and permissions
+
+2. **Message Loss**
+    - Confirm message durability settings
+    - Check consumer acknowledgment mechanism
+    - Verify dead-letter queue configuration
+
+3. **Performance Issues**
+    - Adjust QoS prefetch settings
+    - Optimize message size and format
+    - Increase consumer instances
+
+
+## 🤝 Contributing
+
+Issues and Pull Requests are welcome!
+
+## 📞 Contact
+
+- Project Home: [GitHub](https://github.com/lerity-yao/czt-contrib)
+- Issue Feedback: [Issues](https://github.com/lerity-yao/czt-contrib/issues)
+
+## 📋 Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md)

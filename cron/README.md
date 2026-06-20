@@ -1,199 +1,201 @@
 # cron
 
-基于 [Asynq](https://github.com/hibiken/asynq) 构建的分布式任务队列系统，专为 Go-Zero 框架设计的定时任务和异步任务处理模块。
+[中文](./readme-cn.md)
 
-## 特性
+A distributed task queue system built on [Asynq](https://github.com/hibiken/asynq), designed as a scheduled task and asynchronous task processing module for the Go-Zero framework.
 
-- 🚀 **高性能**: 基于 Redis 的高性能分布式任务队列
-- ⏰ **定时任务**: 支持 Cron 表达式定时任务
-- 🔄 **异步处理**: 异步任务队列，支持延迟执行
-- 📊 **监控指标**: 内置 Prometheus 指标收集
-- 🔍 **链路追踪**: 集成 OpenTelemetry 链路追踪
-- 🛡️ **错误恢复**: 自动 panic 恢复和错误处理
-- 🔧 **配置灵活**: 支持多种 Redis 模式（单机、哨兵、集群）
+## Features
 
-## 安装
+- 🚀 **High Performance**: High-performance distributed task queue based on Redis
+- ⏰ **Scheduled Tasks**: Supports Cron expression scheduled tasks
+- 🔄 **Asynchronous Processing**: Asynchronous task queue with delayed execution support
+- 📊 **Metrics**: Built-in Prometheus metrics collection
+- 🔍 **Distributed Tracing**: Integrated OpenTelemetry tracing
+- 🛡️ **Error Recovery**: Automatic panic recovery and error handling
+- 🔧 **Flexible Configuration**: Supports multiple Redis modes (Single, Sentinel, Cluster)
+
+## Installation
 
 ```bash
 go get github.com/lerity-yao/czt-contrib/cron
 ```
-## 服务生成
+## Service Generation
 
-支持类似 goctl 工具一键生成服务端代码， 工具为 cztctl, 是 goctl 魔改的
+Supports one-click server code generation similar to the goctl tool. The tool is `cztctl`, a customized version of goctl.
 
-也可以自定义服务端代码生成模板
+You can also customize the server code generation templates.
 
-请参考 [cztctl](https://github.com/lerity-yao/czt-contrib/blob/main/cztctl/README.md)
+Please refer to [cztctl](https://github.com/lerity-yao/czt-contrib/blob/main/cztctl/README.md).
 
-## ⚙️ 配置参数
+## ⚙️ Configuration Parameters
 
-### RedisConf (基础连接配置)
-该配置控制如何连接到 Redis，支持 单机(Single)、哨兵(Sentinel) 和 集群(Cluster)。
+### RedisConf (Basic Connection Configuration)
+This configuration controls how to connect to Redis, supporting Single, Sentinel, and Cluster modes.
 
-| 参数名 | 类型 | 默认值 | 详细说明与建议 |
+| Parameter | Type | Default | Description and Recommendations |
 | --- | --- | --- | --- |
-| Mode | string | single | 必填。可选：single, sentinel, cluster。决定了后续哪些字段生效。 |
-| Addr | string | - | Mode=single 时必填。格式 "host:port"。 |
-| Addrs | []string | - | Mode=cluster 时必填。集群种子节点列表，只需填入部分节点，驱动会自动发现全量拓扑。 |
-| MasterName | string | - | Mode=sentinel 时必填。哨兵模式下监控的主节点名称（通常默认为 mymaster）。 |
-| SentinelAddrs | []string | - | Mode=sentinel 时必填。哨兵节点列表。建议至少 3 个以保证高可用。 |
-| Username | string | - | Redis 6.0+ ACL 认证用户名。 |
-| Password | string | - | Redis 认证密码。 |
-| DB | int64 | 0 | Redis 数据库索引。注意：Cluster 模式下此项无效。 |
-| PoolSize | int64 | - | 连接池最大连接数。默认值为 10 * CPU核心数。高并发任务建议根据并发数调大。 |
-| DialTimeout | int64 | 5 | 连接建立超时（秒）。网络环境差时可适当调大。 |
-| ReadTimeout | int64 | 3 | 读超时（秒）。建议保留默认值。 |
-| WriteTimeout | int64 | 3 | 写超时（秒）。建议保留默认值。 |
+| Mode | string | single | Required. Options: single, sentinel, cluster. Determines which subsequent fields take effect. |
+| Addr | string | - | Required when Mode=single. Format "host:port". |
+| Addrs | []string | - | Required when Mode=cluster. List of cluster seed nodes; only some nodes are needed, and the driver will auto-discover the full topology. |
+| MasterName | string | - | Required when Mode=sentinel. The master node name monitored in Sentinel mode (usually defaults to mymaster). |
+| SentinelAddrs | []string | - | Required when Mode=sentinel. List of Sentinel nodes. At least 3 are recommended for high availability. |
+| Username | string | - | Redis 6.0+ ACL authentication username. |
+| Password | string | - | Redis authentication password. |
+| DB | int64 | 0 | Redis database index. Note: this is invalid in Cluster mode. |
+| PoolSize | int64 | - | Maximum number of connections in the pool. Defaults to 10 * number of CPU cores. For high-concurrency tasks, increase based on concurrency. |
+| DialTimeout | int64 | 5 | Connection establishment timeout in seconds. Increase appropriately in poor network environments. |
+| ReadTimeout | int64 | 3 | Read timeout in seconds. Recommended to keep the default. |
+| WriteTimeout | int64 | 3 | Write timeout in seconds. Recommended to keep the default. |
 
-### ServerConfig (任务处理引擎配置)
+### ServerConfig (Task Processing Engine Configuration)
 
-该配置直接影响消费者的处理效率、稳定性和资源占用。
+This configuration directly affects consumer processing efficiency, stability, and resource usage.
 
 - Namespace (string):
-核心逻辑：所有 Key 在 Redis 中都会加上此命名前缀。
-建议：每个独立服务使用不同的 Namespace。这实现了物理隔离，防止不同服务的 Worker 误消费对方的任务。
+Core logic: all keys in Redis will be prefixed with this namespace.
+Recommendation: use a different Namespace for each independent service. This provides physical isolation and prevents workers of different services from accidentally consuming each other's tasks.
 
 
 - Concurrency (int64):
-默认值：0（表示自动设置为 CPU 核心数）。
-建议：如果任务涉及大量网络 IO（如发短信、请求第三方 API），建议调大至 20~100；如果是 CPU 密集型计算，建议保持默认或小幅调大。
+Default: 0 (automatically set to the number of CPU cores).
+Recommendation: if tasks involve a lot of network IO (e.g., sending SMS, calling third-party APIs), increase to 20~100; for CPU-intensive tasks, keep the default or increase slightly.
 
 
 - Queues (map[string]int):
-核心逻辑：定义监听哪些队列及其权重。
-实战举例：{"critical": 6, "default": 3, "low": 1} 表示 60% 的精力处理核心任务。
+Core logic: defines which queues to listen to and their weights.
+Practical example: {"critical": 6, "default": 3, "low": 1} means 60% of effort goes to critical tasks.
 
 - StrictPriority (bool):
-逻辑：若为 true，只要 critical 队列有一个任务，Worker 绝不会去碰 default 队列。
-注意：开启此项可能导致低优先级队列“饥饿”（永远得不到处理），请谨慎使用。
+Logic: if true, as long as the critical queue has a task, the worker will never touch the default queue.
+Note: enabling this may cause low-priority queues to starve (never get processed); use with caution.
 
 - TaskCheckInterval (int64):
-逻辑：所有队列都为空时，Worker 歇多久再去检查 Redis。
-建议：默认 1 秒。过短会增加 Redis CPU 负担，过长会导致任务处理有明显延迟。
+Logic: how long the worker rests before checking Redis again when all queues are empty.
+Recommendation: default 1 second. Too short increases Redis CPU load; too long causes noticeable task processing delays.
 
 
 - ShutdownTimeout (int64):
-逻辑：优雅停机时，Worker 等待当前任务完成的最长时间。
-建议：默认 8 秒。如果你的任务逻辑很长（如处理大文件），必须调大此值，否则任务会被强行中断并重新入队。
+Logic: maximum time the worker waits for current tasks to complete during graceful shutdown.
+Recommendation: default 8 seconds. If your task logic is long (e.g., processing large files), you must increase this value, otherwise tasks will be forcibly interrupted and requeued.
 
 
 - DelayedTaskCheckInterval (int64):
-逻辑：检查“延时任务”和“重试任务”是否到点的频率。默认 5 秒。
+Logic: frequency of checking whether delayed tasks and retry tasks are due. Default 5 seconds.
 
 
 - HealthCheckInterval (int64):
-逻辑：Worker 与 Redis 的心跳检测。建议保持默认 15 秒。
+Logic: heartbeat detection between the worker and Redis. Recommended to keep the default 15 seconds.
 
 
-- GroupGracePeriod (int64): 聚合窗口期（滑动窗口）。默认 60 秒。每次有新任务进入组时重置计时器，宽限期内无新任务才触发聚合。
+- GroupGracePeriod (int64): Aggregation window (sliding window). Default 60 seconds. The timer resets each time a new task enters the group; aggregation is triggered only when no new tasks arrive during the grace period.
 
 
-- GroupMaxDelay (int64): 强制触发聚合的最长等待时间（硬上限）。默认 300 秒。从组内第一个任务到来算起，无论是否有新任务，到时间就强制聚合。防止 GracePeriod 被不断重置导致永不聚合。
+- GroupMaxDelay (int64): Maximum waiting time to force aggregation (hard limit). Default 300 seconds. From the arrival of the first task in the group, aggregation is forced at this time regardless of new tasks. Prevents GracePeriod from being reset indefinitely and never aggregating.
 
 
-- GroupMaxSize (int64): 组内任务达到多少个时，不等待窗口期直接触发聚合。默认 0（无限制）。
+- GroupMaxSize (int64): When the number of tasks in the group reaches this threshold, aggregation is triggered immediately without waiting for the window. Default 0 (unlimited).
 
 
-> 以上三个条件为 **OR** 关系，满足任意一个即触发聚合。需配合 `WithGroupAggregator` 使用，否则分组功能不生效。
+> The above three conditions are in an **OR** relationship; aggregation is triggered when any one is met. Must be used with `WithGroupAggregator`; otherwise the grouping feature does not take effect.
 
 
-- JanitorInterval (int64): 检查并清理 Redis 中已完成、过期任务的时间间隔。
+- JanitorInterval (int64): Interval for checking and cleaning completed/expired tasks in Redis.
 
 
-- JanitorBatchSize (int64): 每次清理操作删除的数量上限。默认 100。防止一次性删除过多导致 Redis 阻塞。
+- JanitorBatchSize (int64): Maximum number of items deleted per cleanup operation. Default 100. Prevents Redis from blocking due to deleting too many at once.
 
-**配置建议**
-- 必须设置 Namespace：这是多服务共存的基础。
-- 合理设置 Concurrency：IO 多则大，CPU 多则小。
-- 设置 ShutdownTimeout：必须大于你业务逻辑中可能出现的最长耗时。
+**Configuration Recommendations**
+- Namespace must be set: this is the foundation for multiple services to coexist.
+- Set Concurrency reasonably: larger for more IO, smaller for more CPU.
+- Set ShutdownTimeout: must be greater than the longest possible execution time in your business logic.
 
-### ClientConfig (客户端配置)
+### ClientConfig (Client Configuration)
 
-仅包含 `RedisConf`，与 Server 共用同一套 Redis 连接配置。
+Contains only `RedisConf`, sharing the same Redis connection configuration as the Server.
 
 ### ServerOption
 
-| Option | 参数 | 说明 |
+| Option | Parameter | Description |
 |--------|------|------|
-| `WithServerTLS` | `*tls.Config` | 设置 Redis TLS 连接配置 |
-| `WithServerLogger` | `asynq.Logger` | 替换默认日志器（推荐 `&cron.AsynqLogger{}` 对接 go-zero logx） |
-| `WithGroupAggregator` | `asynq.GroupAggregator` | 注入分组聚合器，启用 Group 功能 |
-| `WithRetryDelayFunc` | `asynq.RetryDelayFunc` | 自定义重试退避策略（默认 `ExponentialRetryDelay`） |
+| `WithServerTLS` | `*tls.Config` | Set Redis TLS connection configuration |
+| `WithServerLogger` | `asynq.Logger` | Replace the default logger (recommended: `&cron.AsynqLogger{}` to bridge to go-zero logx) |
+| `WithGroupAggregator` | `asynq.GroupAggregator` | Inject a group aggregator to enable Group functionality |
+| `WithRetryDelayFunc` | `asynq.RetryDelayFunc` | Customize retry backoff strategy (default: `ExponentialRetryDelay`) |
 
 ### ClientOption
 
-| Option | 参数 | 说明 |
+| Option | Parameter | Description |
 |--------|------|------|
-| `WithClientTLS` | `*tls.Config` | 设置 Redis TLS 连接配置 |
+| `WithClientTLS` | `*tls.Config` | Set Redis TLS connection configuration |
 
 
-## API 参考
+## API Reference
 
-### 构造函数
+### Constructors
 
-| 函数 | 签名 | 说明 |
+| Function | Signature | Description |
 |------|------|------|
-| `MustNewServer` | `func MustNewServer(conf ServerConfig, opts ...ServerOption) Server` | 创建 Server，失败 panic |
-| `NewServer` | `func NewServer(conf ServerConfig, opts ...ServerOption) (Server, error)` | 创建 Server，失败返回 error |
-| `MustNewClient` | `func MustNewClient(conf ClientConfig, opts ...ClientOption) *CommonClient` | 创建 Client，失败 panic |
-| `NewClient` | `func NewClient(conf ClientConfig, opts ...ClientOption) (*CommonClient, error)` | 创建 Client，失败返回 error |
-| `MustNewClientFromRedisClient` | `func MustNewClientFromRedisClient(rds redis.UniversalClient) *CommonClient` | 从已有 Redis 连接创建 Client，失败 panic |
-| `NewClientFromRedisClient` | `func NewClientFromRedisClient(rds redis.UniversalClient) (*CommonClient, error)` | 从已有 Redis 连接创建 Client，失败返回 error |
+| `MustNewServer` | `func MustNewServer(conf ServerConfig, opts ...ServerOption) Server` | Create a Server; panics on failure |
+| `NewServer` | `func NewServer(conf ServerConfig, opts ...ServerOption) (Server, error)` | Create a Server; returns error on failure |
+| `MustNewClient` | `func MustNewClient(conf ClientConfig, opts ...ClientOption) *CommonClient` | Create a Client; panics on failure |
+| `NewClient` | `func NewClient(conf ClientConfig, opts ...ClientOption) (*CommonClient, error)` | Create a Client; returns error on failure |
+| `MustNewClientFromRedisClient` | `func MustNewClientFromRedisClient(rds redis.UniversalClient) *CommonClient` | Create a Client from an existing Redis connection; panics on failure |
+| `NewClientFromRedisClient` | `func NewClientFromRedisClient(rds redis.UniversalClient) (*CommonClient, error)` | Create a Client from an existing Redis connection; returns error on failure |
 
-### 公开类型
+### Public Types
 
-| 类型 | 定义 | 说明 |
+| Type | Definition | Description |
 |------|------|------|
-| `Task` | `struct { Type string; Payload []byte }` | Handler 接收的任务载体，Type 为任务类型，Payload 为原始字节数据 |
-| `HandlerFunc` | `func(ctx context.Context, t *Task) error` | 任务处理函数签名，所有 Handler 均需实现此类型 |
-| `AsynqLogger` | `struct{}` | 内置日志适配器，将 asynq 日志桥接到 go-zero logx |
+| `Task` | `struct { Type string; Payload []byte }` | Task carrier received by the handler; Type is the task type, Payload is the raw byte data |
+| `HandlerFunc` | `func(ctx context.Context, t *Task) error` | Task handler function signature; all handlers must implement this type |
+| `AsynqLogger` | `struct{}` | Built-in log adapter that bridges asynq logs to go-zero logx |
 
-### Server 接口方法
+### Server Interface Methods
 
-| 方法 | 签名 | 说明 |
+| Method | Signature | Description |
 |------|------|------|
-| `Add` | `Add(pattern string, handler HandlerFunc)` | 注册任务 Handler（消费外部投递的任务），自动拼接 Namespace 前缀 |
-| `CronAdd` | `CronAdd(spec string, pattern string, handler HandlerFunc, opts ...asynq.Option) string` | 一步注册定时任务（自产自销），同时完成 handler 注册与定时调度，自动设置 TaskID 去重，返回 EntryID |
-| `SetBaseContext` | `SetBaseContext(ctx context.Context)` | 注入基础上下文，所有任务 handler 的 ctx 以此为父级，必须在 Start() 之前调用 |
-| `Start` | `Start()` | 启动 Scheduler + Processor，非阻塞 |
-| `Stop` | `Stop()` | 优雅停机：Scheduler → Server → Inspector 顺序关闭 |
+| `Add` | `Add(pattern string, handler HandlerFunc)` | Register a task handler (consume tasks pushed externally); automatically prepends the Namespace prefix |
+| `CronAdd` | `CronAdd(spec string, pattern string, handler HandlerFunc, opts ...asynq.Option) string` | One-step scheduled task registration (self-produced and self-consumed); completes both handler registration and scheduled dispatch, automatically sets TaskID deduplication, returns EntryID |
+| `SetBaseContext` | `SetBaseContext(ctx context.Context)` | Inject a base context; all task handler ctxs use this as parent. Must be called before Start() |
+| `Start` | `Start()` | Start Scheduler + Processor; non-blocking |
+| `Stop` | `Stop()` | Graceful shutdown: closes Scheduler → Server → Inspector in order |
 
-### Client 接口方法
+### Client Interface Methods
 
-| 方法 | 签名 | 说明 |
+| Method | Signature | Description |
 |------|------|------|
-| `Push` | `Push(ctx, taskType string, payload []byte, opts ...asynq.Option) (*asynq.TaskInfo, error)` | 立即执行，推送原始字节 |
-| `PushJson` | `PushJson(ctx, taskType string, data any, opts ...asynq.Option) (*asynq.TaskInfo, error)` | 立即执行，自动 JSON 序列化 |
-| `PushIn` | `PushIn(ctx, taskType string, payload []byte, delay time.Duration, opts ...) (*asynq.TaskInfo, error)` | 延时执行，指定 Duration |
-| `PushInJson` | `PushInJson(ctx, taskType string, data any, delay time.Duration, opts ...) (*asynq.TaskInfo, error)` | 延时执行，自动 JSON 序列化 |
-| `PushAt` | `PushAt(ctx, taskType string, payload []byte, at time.Time, opts ...) (*asynq.TaskInfo, error)` | 定点执行，指定绝对时间 |
-| `PushAtJson` | `PushAtJson(ctx, taskType string, data any, at time.Time, opts ...) (*asynq.TaskInfo, error)` | 定点执行，自动 JSON 序列化 |
-| `CancelTask` | `CancelTask(queue, taskID string) error` | 撤回 Scheduled/Pending/Retry 状态的任务 |
-| `RescheduleTask` | `RescheduleTask(ctx, queue, taskID, taskType string, data any, newDelay time.Duration, opts ...) (*asynq.TaskInfo, error)` | 原子撤回 + 重新投递，TaskID 不变 |
-| `Close` | `Close() error` | 关闭客户端连接 |
+| `Push` | `Push(ctx, taskType string, payload []byte, opts ...asynq.Option) (*asynq.TaskInfo, error)` | Execute immediately; push raw bytes |
+| `PushJson` | `PushJson(ctx, taskType string, data any, opts ...asynq.Option) (*asynq.TaskInfo, error)` | Execute immediately; auto JSON serialization |
+| `PushIn` | `PushIn(ctx, taskType string, payload []byte, delay time.Duration, opts ...) (*asynq.TaskInfo, error)` | Delayed execution; specify Duration |
+| `PushInJson` | `PushInJson(ctx, taskType string, data any, delay time.Duration, opts ...) (*asynq.TaskInfo, error)` | Delayed execution; auto JSON serialization |
+| `PushAt` | `PushAt(ctx, taskType string, payload []byte, at time.Time, opts ...) (*asynq.TaskInfo, error)` | Execute at a specific time; specify absolute time |
+| `PushAtJson` | `PushAtJson(ctx, taskType string, data any, at time.Time, opts ...) (*asynq.TaskInfo, error)` | Execute at a specific time; auto JSON serialization |
+| `CancelTask` | `CancelTask(queue, taskID string) error` | Withdraw tasks in Scheduled/Pending/Retry state |
+| `RescheduleTask` | `RescheduleTask(ctx, queue, taskID, taskType string, data any, newDelay time.Duration, opts ...) (*asynq.TaskInfo, error)` | Atomic withdraw + re-dispatch; TaskID remains unchanged |
+| `Close` | `Close() error` | Close the client connection |
 
-> 所有 Push 系列方法默认 `MaxRetry=0`（不重试），可通过 opts 覆盖。
+> All Push methods default to `MaxRetry=0` (no retries); this can be overridden via opts.
 
-### 工具函数
+### Utility Functions
 
-| 函数 | 签名 | 说明 |
+| Function | Signature | Description |
 |------|------|------|
-| `ExponentialRetryDelay` | `func(n int, _ error, _ *asynq.Task) time.Duration` | 内置指数退避（`2^n - 1` 秒），Server 默认使用 |
-| `GetTaskID` | `func(ctx context.Context) (string, bool)` | 任务 ID，重试过程中保持不变 |
-| `GetRetryCount` | `func(ctx context.Context) (int, bool)` | 当前重试次数，0 = 首次执行 |
-| `GetMaxRetry` | `func(ctx context.Context) (int, bool)` | 最大重试次数上限 |
-| `GetQueueName` | `func(ctx context.Context) (string, bool)` | 任务所在队列名 |
+| `ExponentialRetryDelay` | `func(n int, _ error, _ *asynq.Task) time.Duration` | Built-in exponential backoff (`2^n - 1` seconds); used by Server by default |
+| `GetTaskID` | `func(ctx context.Context) (string, bool)` | Task ID; remains unchanged across retries |
+| `GetRetryCount` | `func(ctx context.Context) (int, bool)` | Current retry count; 0 = first execution |
+| `GetMaxRetry` | `func(ctx context.Context) (int, bool)` | Maximum retry limit |
+| `GetQueueName` | `func(ctx context.Context) (string, bool)` | Queue name where the task resides |
 
-## 进阶指南
+## Advanced Guide
 
-### Namespace 与 TaskType 匹配规则
+### Namespace and TaskType Matching Rules
 
-**这是一个重要的注意事项，客户端投递任务时必须了解服务端的 Namespace 配置。**
+**This is an important note: when pushing tasks from the client, you must understand the server's Namespace configuration.**
 
-服务端配置 `Namespace` 后会产生两个影响：
+Configuring `Namespace` on the server has two effects:
 
-1. **taskType 自动拼接**：`Add` 方法将 pattern 转换为 `Namespace:pattern` 格式
-2. **队列自动创建**：服务端监听以 Namespace 命名的队列
+1. **taskType automatic concatenation**: the `Add` method converts the pattern to the `Namespace:pattern` format
+2. **Queue automatic creation**: the server listens on queues named after the Namespace
 
 ```go
 // server.go Add 方法核心逻辑
@@ -217,50 +219,50 @@ func (c *CommonServer) buildConfig() {
 }
 ```
 
-**在 go-zero 环境中**，通常会将服务名作为 Namespace：
+**In the go-zero environment**, the service name is usually used as the Namespace:
 
 ```go
 // serviceContext.go 中常见写法
 c.WorkConf.Namespace = c.Name  // 使用 go-zero 配置的服务名
 ```
 
-**客户端投递任务时必须同时满足两个条件：**
+**When pushing tasks from the client, two conditions must be met simultaneously:**
 
-1. **taskType 带 Namespace 前缀**：与服务端注册的完整 pattern 一致
-2. **指定队列**：通过 `asynq.Queue(namespace)` 指定任务投递到哪个队列
+1. **taskType carries the Namespace prefix**: consistent with the full pattern registered on the server
+2. **Specify the queue**: use `asynq.Queue(namespace)` to specify which queue the task is pushed to
 
 ```go
 import "github.com/hibiken/asynq"
 
-// 假设服务端配置：Namespace = "order-service"，注册：Add("send_email", handler)
-// 服务端实际注册的 pattern："order-service:send_email"
-// 服务端监听的队列："order-service"
+// Assume server config: Namespace = "order-service", registered: Add("send_email", handler)
+// Actual registered pattern on the server: "order-service:send_email"
+// Queue listened by the server: "order-service"
 
-// ✔️ 正确写法：taskType 带 namespace + 指定队列
+// ✔️ Correct: taskType with namespace + queue specified
 client.PushJson(ctx, "order-service:send_email", payload, asynq.Queue("order-service"))
 ```
 
-**总结**：
-- 客户端和服务端统一 Namespace 命名规范
-- 定义常量统一管理 taskType 和 Namespace，避免硬编码
-- 若服务端未配置 Namespace，则 taskType 直接使用原始 pattern，无需指定队列（默认 "default"）
+**Summary**:
+- Unify Namespace naming conventions between client and server
+- Define constants to manage taskType and Namespace centrally and avoid hard-coding
+- If the server does not configure Namespace, use the original pattern directly as taskType and there is no need to specify a queue (defaults to "default")
 
-### 重试退避策略
+### Retry Backoff Strategy
 
-Server 默认使用 `ExponentialRetryDelay` 指数退避策略，延迟公式为 `2^n - 1` 秒：
+The Server uses `ExponentialRetryDelay` exponential backoff by default; the delay formula is `2^n - 1` seconds:
 
-| 重试次数 | 延迟 |
+| Retry Count | Delay |
 |---------|------|
 | 1 | 1s |
 | 2 | 3s |
 | 3 | 7s |
 | 4 | 15s |
 | 5 | 31s |
-| 6 | 63s（~1分钟） |
-| 7 | 127s（~2分钟） |
-| 10 | 1023s（~17分钟） |
+| 6 | 63s (~1 minute) |
+| 7 | 127s (~2 minutes) |
+| 10 | 1023s (~17 minutes) |
 
-如需自定义退避策略，可通过 `WithRetryDelayFunc` 覆盖：
+To customize the backoff strategy, override it via `WithRetryDelayFunc`:
 
 ```go
 server := cron.MustNewServer(c.WorkConf,
@@ -271,9 +273,9 @@ server := cron.MustNewServer(c.WorkConf,
 )
 ```
 
-#### 任务元信息
+#### Task Metadata
 
-在 Handler 中可通过 `ctx` 获取任务运行时元信息：
+In the handler, task runtime metadata can be obtained from `ctx`:
 
 ```go
 retryCount, _ := cron.GetRetryCount(ctx)  // 当前第几次重试（0 = 首次执行）
@@ -282,9 +284,9 @@ taskID, _     := cron.GetTaskID(ctx)      // 任务 ID（重试不变）
 queueName, _  := cron.GetQueueName(ctx)   // 队列名
 ```
 
-#### 放弃重试
+#### Skip Retry
 
-当错误不可恢复时（参数非法、业务拒绝、幂等冲突），使用 `asynq.SkipRetry` 放弃重试：
+When an error is unrecoverable (invalid parameters, business rejection, idempotency conflict), use `asynq.SkipRetry` to skip retries:
 
 ```go
 // internal/logic/demoA/gdemoalogic.go
@@ -300,23 +302,23 @@ func (l *GDemoALogic) GDemoA(req *types.Name) error {
 }
 ```
 
-> **判断标准：** 重试了结果还是一样 → SkipRetry；重试了有可能成功 → 让它重试。
+> **Decision criterion:** if retrying will yield the same result → SkipRetry; if retrying might succeed → let it retry.
 >
-> **注意：** 必须使用 `fmt.Errorf("%w", asynq.SkipRetry)` 包装。`github.com/pkg/errors` 的 `errors.Wrap` 不兼容标准库 `errors.Is()` 解包链，asynq 无法识别。
+> **Note:** must wrap with `fmt.Errorf("%w", asynq.SkipRetry)`. `github.com/pkg/errors`'s `errors.Wrap` is incompatible with the standard library `errors.Is()` unwrap chain, so asynq cannot recognize it.
 
-### 任务超时控制
+### Task Timeout Control
 
-> **v0.1.0 起**：定时任务与投递任务的执行超时均可由业务侧 **按任务粒度** 注入，handler 收到的 `ctx` 自带 `Deadline`，到期后 `ctx.Done()` 自动触发，业务可主动退出。
+> **From v0.1.0**: execution timeouts for scheduled tasks and pushed tasks can be injected at the **per-task granularity** by the business side; the `ctx` received by the handler carries a `Deadline`, which automatically triggers `ctx.Done()` when expired, allowing the business to exit proactively.
 
-#### 设计要点
+#### Design Points
 
-- asynq 默认超时为硬编码常量 **30 分钟**，且无法通过 `asynq.Config` 全局配置。
-- 单任务超时通过入队元数据 `asynq.Timeout(d)` 写入 `msg.Timeout`，processor 拉出任务时调用 `context.WithDeadline(baseCtx, deadline)` 注入 ctx。
-- 仅入队动作（`CronAdd`、`Client.Push*`）能携带 `asynq.Timeout`；纯 handler 注册的 `Add` 不参与投递，无法设置。
+- asynq's default timeout is a hard-coded constant of **30 minutes**, and cannot be configured globally via `asynq.Config`.
+- Per-task timeout is written to `msg.Timeout` via the enqueue metadata `asynq.Timeout(d)`; when the processor pulls a task, it injects ctx via `context.WithDeadline(baseCtx, deadline)`.
+- Only enqueue actions (`CronAdd`, `Client.Push*`) can carry `asynq.Timeout`; pure handler registration via `Add` does not participate in dispatch and cannot set it.
 
-#### 定时任务：用 go-zero RestConf.Timeout 接管
+#### Scheduled Tasks: Managed by go-zero RestConf.Timeout
 
-`rest.RestConf.Timeout` 默认 `3000ms`、必 > 0，可在 `workers.go` 直接复用为定时任务超时基准：
+`rest.RestConf.Timeout` defaults to `3000ms` and must be > 0; it can be reused directly in `workers.go` as the scheduled task timeout baseline:
 
 ```go
 // internal/handler/workers.go
@@ -339,56 +341,56 @@ func RegisterHandlers(server *service.ServiceGroup, serverCtx *svc.ServiceContex
 }
 ```
 
-效果：定时到点入队时 `msg.Timeout` 自动写入 yaml 配置的 `Timeout`，handler 收到的 ctx `Deadline = now + Timeout`。改 yaml 即可全局调整所有定时任务的超时上限，无需改代码。
+Effect: when the scheduled time arrives and the task is enqueued, `msg.Timeout` is automatically set to the `Timeout` configured in yaml; the handler receives ctx with `Deadline = now + Timeout`. Changing yaml globally adjusts the timeout limit for all scheduled tasks without code changes.
 
-> 默认 3 秒对部分 IO 密集型定时任务偏短，建议在 yaml 中显式配置（如 `Timeout: 30000`）。
+> The default 3 seconds is short for some IO-intensive scheduled tasks; it is recommended to configure explicitly in yaml (e.g., `Timeout: 30000`).
 
-#### 投递任务：客户端按任务自定义超时
+#### Pushed Tasks: Custom Timeout per Task on the Client
 
-`Client.Push*` 系列均支持透传 `asynq.Timeout(d)`，由投递方按任务实际耗时按需指定，**不受 30 分钟限制**：
+The `Client.Push*` family all support passing through `asynq.Timeout(d)`, allowing the pusher to specify as needed based on actual task duration, **not limited by the 30-minute default**:
 
 ```go
 import "github.com/hibiken/asynq"
 
-// 短任务：5 秒超时
+// Short task: 5-second timeout
 client.PushJson(ctx, "order-service:send_sms", payload,
     asynq.Queue("order-service"),
     asynq.Timeout(5*time.Second))
 
-// 长任务：1 小时超时
+// Long task: 1-hour timeout
 client.PushJson(ctx, "order-service:export_report", payload,
     asynq.Queue("order-service"),
     asynq.Timeout(time.Hour))
 ```
 
-> 投递方不传 `asynq.Timeout` 时回落到 asynq 默认 30 分钟。生产环境建议每个任务按耗时预算显式设置。
+> If the pusher does not pass `asynq.Timeout`, it falls back to the asynq default of 30 minutes. In production, it is recommended to set each task explicitly according to its time budget.
 
-### 任务分组聚合（Group Aggregation）
+### Task Group Aggregation
 
-将多个同组任务合并为一个批量任务再处理，适用于通知合并、批量写入等场景。
+Merge multiple tasks in the same group into a single batch task before processing; suitable for notification merging, batch writes, and similar scenarios.
 
-#### 触发条件（三选一）
+#### Trigger Conditions (Any One of Three)
 
-| 条件 | 配置参数 | 默认值 | 触发机制 |
+| Condition | Config Parameter | Default | Trigger Mechanism |
 |------|----------|--------|----------|
-| 宽限期超时 | `GroupGracePeriod` | 60s | **滑动窗口**：每来一个新任务重置计时器，宽限期内无新任务才触发 |
-| 最大延迟 | `GroupMaxDelay` | 300s | **硬上限**：从第一个任务到来算起，到时间强制聚合（兜底） |
-| 数量达标 | `GroupMaxSize` | 0（无限制） | 组内任务数达到阈值，立即聚合 |
+| Grace period timeout | `GroupGracePeriod` | 60s | **Sliding window**: resets the timer each time a new task arrives; aggregation is triggered only when no new tasks arrive during the grace period |
+| Maximum delay | `GroupMaxDelay` | 300s | **Hard limit**: from the arrival of the first task, aggregation is forced at this time as a safeguard |
+| Count threshold | `GroupMaxSize` | 0 (unlimited) | When the number of tasks in the group reaches the threshold, aggregate immediately |
 
-#### 触发场景示例
+#### Trigger Scenario Examples
 
-假设配置：`GracePeriod=60s, MaxDelay=300s, MaxSize=50`
+Assume configuration: `GracePeriod=60s, MaxDelay=300s, MaxSize=50`
 
-| 场景 | 行为 |
+| Scenario | Behavior |
 |------|------|
-| 来了 3 个任务后不再来 | 最后一个任务到达 60s 后聚合（命中 GracePeriod） |
-| 每隔 30s 持续来任务 | 到 300s 时强制聚合（命中 MaxDelay 兜底） |
-| 短时间连续来了 50 个任务 | 立即聚合（命中 MaxSize） |
-| 每隔 61s 来一个任务 | 每个任务单独聚合（61s > 60s，GracePeriod 先触发） |
+| 3 tasks arrive and then no more | Aggregated 60s after the last task arrives (hits GracePeriod) |
+| Tasks keep arriving every 30s | Forced aggregation at 300s (hits MaxDelay safeguard) |
+| 50 tasks arrive in quick succession | Aggregate immediately (hits MaxSize) |
+| One task arrives every 61s | Each task aggregates separately (61s > 60s, GracePeriod triggers first) |
 
-#### 使用方式
+#### Usage
 
-**1. 服务端注入聚合器（必需）**
+**1. Inject the aggregator on the server (required)**
 
 ```go
 import "github.com/hibiken/asynq"
@@ -408,21 +410,21 @@ server := cron.MustNewServer(c.WorkConf,
 )
 ```
 
-> 整个 Server 只有一个 `GroupAggregator`，通过 `group` 参数区分不同分组的聚合逻辑。
+> The whole Server has only one `GroupAggregator`; different group aggregation logics are distinguished by the `group` parameter.
 
-**2. 客户端投递时指定分组**
+**2. Specify the group when pushing from the client**
 
 ```go
 import "github.com/hibiken/asynq"
 
-// 投递到 "batch_email" 分组
+// Push to the "batch_email" group
 client.PushJson(ctx, "order-service:send_email", payload,
     asynq.Queue("order-service"),
     asynq.Group("batch_email"),  // 指定分组名
 )
 ```
 
-**3. 服务端注册合并后任务的 Handler**
+**3. Register the handler for the merged task on the server**
 
 ```go
 // internal/handler/batch/batchSendEmailHandler.go
@@ -443,23 +445,23 @@ func BatchSendEmailHandler(svcCtx *svc.ServiceContext) cron.HandlerFunc {
 serverCtx.CronServer.Add("batch_send_email", batch.BatchSendEmailHandler(serverCtx))
 ```
 
-#### 注意事项
+#### Notes
 
-- 不传 `WithGroupAggregator` 时，分组功能完全不生效，Group 相关配置参数为摆设
-- 客户端所有 Push 系列方法均支持 `asynq.Group()` 选项
-- 一个 Server 只有一个聚合器，多个分组通过 `group` 参数路由
+- Without passing `WithGroupAggregator`, the grouping feature does not work at all, and Group-related configuration parameters are ignored
+- All client Push methods support the `asynq.Group()` option
+- One Server has only one aggregator; multiple groups are routed via the `group` parameter
 
-### 链路追踪
+### Distributed Tracing
 
-- 生产者：在 CommonClient 中通过 otel.Inject 将 TraceID 压入 Task 的 Header。
-- 消费者：通过 TraceMiddleware 调用 otel.Extract 恢复上下文。
-- 结果：你可以在 Jaeger 或 Grafana Tempo 中看到从 API 请求到异步任务执行的完整时序图。
+- Producer: In CommonClient, `otel.Inject` pushes TraceID into the Task header.
+- Consumer: `TraceMiddleware` calls `otel.Extract` to restore the context.
+- Result: you can see the complete timing diagram from API request to asynchronous task execution in Jaeger or Grafana Tempo.
 
-注意，这链路跟踪是集成在 go-zero 框架中的，你需要在 go-zero 项目中开启链路跟踪功能。
+Note: this tracing is integrated into the go-zero framework; you need to enable tracing in the go-zero project.
 
-### 日志替换
+### Logger Replacement
 
-默认使用 asynq 自带日志。通过 `WithServerLogger` 替换：
+By default, asynq's built-in logger is used. Replace it via `WithServerLogger`:
 
 ```go
 cron := cron.MustNewServer(c.WorkConf, cron.WithServerLogger(&cron.AsynqLogger{}))
@@ -467,7 +469,7 @@ cron := cron.MustNewServer(c.WorkConf, cron.WithServerLogger(&cron.AsynqLogger{}
 
 ### Redis TLS
 
-通过 `WithServerTLS` / `WithClientTLS` 配置 TLS 连接：
+Configure TLS connections via `WithServerTLS` / `WithClientTLS`:
 
 ```go
 tlsCfg := &tls.Config{InsecureSkipVerify: true}
@@ -475,65 +477,65 @@ server := cron.MustNewServer(conf, cron.WithServerTLS(tlsCfg))
 client := cron.MustNewClient(conf, cron.WithClientTLS(tlsCfg))
 ```
 
-### 监控指标
+### Metrics
 
-监控指标已并入 go-zero 的 Prometheus 体系，通过 `/metrics` 端点暴露。
+Metrics are integrated into the go-zero Prometheus system and exposed via the `/metrics` endpoint.
 
-#### Server 端指标 (`cron_server_`)
+#### Server Metrics (`cron_server_`)
 
-##### 任务处理指标（Interceptor 采集）
+##### Task Processing Metrics (Interceptor Collection)
 
-| 指标 | 类型 | 标签 | 说明 |
+| Metric | Type | Labels | Description |
 |------|------|------|------|
-| `cron_server_consume_total` | Counter | task_type, status | 消费计数（status: success/fail/skip_retry） |
-| `cron_server_consume_duration_ms` | Histogram | task_type | 消费耗时 |
-| `cron_server_consume_bytes` | Counter | task_type | 消费字节数 |
-| `cron_server_active_workers` | Gauge | task_type | 当前并发数 |
-| `cron_server_retry_total` | Counter | task_type | 重试执行次数 |
-| `cron_server_skip_retry_total` | Counter | task_type | 跳过重试次数 |
-| `cron_server_panic_total` | Counter | task_type | panic 次数（panic 不重试） |
+| `cron_server_consume_total` | Counter | task_type, status | Consumption count (status: success/fail/skip_retry) |
+| `cron_server_consume_duration_ms` | Histogram | task_type | Consumption duration |
+| `cron_server_consume_bytes` | Counter | task_type | Consumption bytes |
+| `cron_server_active_workers` | Gauge | task_type | Current concurrency |
+| `cron_server_retry_total` | Counter | task_type | Retry execution count |
+| `cron_server_skip_retry_total` | Counter | task_type | Skip retry count |
+| `cron_server_panic_total` | Counter | task_type | Panic count (panics are not retried) |
 
-##### Scheduler 指标
+##### Scheduler Metrics
 
-| 指标 | 类型 | 标签 | 说明 |
+| Metric | Type | Labels | Description |
 |------|------|------|------|
-| `cron_server_scheduler_trigger_total` | Counter | task_type | 定时任务触发次数 |
-| `cron_server_scheduler_registered` | Gauge | - | 当前注册的定时任务数 |
+| `cron_server_scheduler_trigger_total` | Counter | task_type | Scheduled task trigger count |
+| `cron_server_scheduler_registered` | Gauge | - | Number of currently registered scheduled tasks |
 
-##### 队列状态指标（Collector 采集）
+##### Queue State Metrics (Collector Collection)
 
-| 指标 | 类型 | 标签 | 说明 |
+| Metric | Type | Labels | Description |
 |------|------|------|------|
-| `cron_server_tasks_enqueued_total` | Gauge | queue, state | 各状态任务数（state: active/pending/scheduled/retry/archived/completed） |
-| `cron_server_queue_size` | Gauge | queue | 队列任务总数 |
-| `cron_server_queue_latency_seconds` | Gauge | queue | 队列延迟（最旧 pending 任务等待时间） |
-| `cron_server_queue_memory_usage_approx_bytes` | Gauge | queue | 队列内存占用（采样估算值） |
-| `cron_server_tasks_processed_total` | Counter | queue | 已处理任务总数（含成功和失败） |
-| `cron_server_tasks_failed_total` | Counter | queue | 失败任务总数 |
-| `cron_server_queue_paused_total` | Gauge | queue | 队列暂停状态 |
-| `cron_server_queue_groups` | Gauge | queue | 聚合组数量 |
-| `cron_server_tasks_aggregating_total` | Gauge | queue | 聚合中的任务数 |
+| `cron_server_tasks_enqueued_total` | Gauge | queue, state | Number of tasks in each state (state: active/pending/scheduled/retry/archived/completed) |
+| `cron_server_queue_size` | Gauge | queue | Total number of tasks in the queue |
+| `cron_server_queue_latency_seconds` | Gauge | queue | Queue latency (wait time of the oldest pending task) |
+| `cron_server_queue_memory_usage_approx_bytes` | Gauge | queue | Queue memory usage (sampled estimate) |
+| `cron_server_tasks_processed_total` | Counter | queue | Total number of processed tasks (success and failure) |
+| `cron_server_tasks_failed_total` | Counter | queue | Total number of failed tasks |
+| `cron_server_queue_paused_total` | Gauge | queue | Queue paused state |
+| `cron_server_queue_groups` | Gauge | queue | Number of aggregation groups |
+| `cron_server_tasks_aggregating_total` | Gauge | queue | Number of aggregating tasks |
 
-> 队列状态指标通过自定义 `QueueMetricsCollector` 采集，支持队列白名单过滤，解决多服务共用 Redis 时指标混杂问题。
+> Queue state metrics are collected via a custom `QueueMetricsCollector`, supporting queue whitelist filtering to avoid metric mixing when multiple services share Redis.
 
-#### Client 端指标 (`cron_client_`)
+#### Client Metrics (`cron_client_`)
 
-| 指标 | 类型 | 标签 | 说明 |
+| Metric | Type | Labels | Description |
 |------|------|------|------|
-| `cron_client_push_total` | Counter | task_type, push_type, status | 投递计数（push_type: immediate/delayed/scheduled） |
-| `cron_client_push_duration_ms` | Histogram | task_type | 投递耗时 |
-| `cron_client_push_bytes` | Counter | task_type | 投递字节数 |
-| `cron_client_cancel_total` | Counter | task_type, status | 撤销任务计数 |
+| `cron_client_push_total` | Counter | task_type, push_type, status | Push count (push_type: immediate/delayed/scheduled) |
+| `cron_client_push_duration_ms` | Histogram | task_type | Push duration |
+| `cron_client_push_bytes` | Counter | task_type | Push bytes |
+| `cron_client_cancel_total` | Counter | task_type, status | Cancel task count |
 
-注意：这些指标需要在 go-zero 项目中开启 Prometheus 监控功能。
+Note: these metrics require enabling Prometheus monitoring in the go-zero project.
 
-## 完整示例
+## Full Example
 
-### 在 go-zero 中使用
+### Using in go-zero
 
 #### Server
 
-**目录结构**
+**Directory Structure**
 
 ```shell
 ├── etc/
@@ -555,7 +557,7 @@ client := cron.MustNewClient(conf, cron.WithClientTLS(tlsCfg))
 └── main.go
 ```
 
-**代码**
+**Code**
 
 ```go
 // internal/config/config.go
@@ -661,7 +663,7 @@ func (l *GDemoALogic) GDemoA(req *types.Name) error {
 
 #### Client
 
-**重要：客户端投递任务时，taskType 必须与服务端注册的完整 pattern 一致（包含 Namespace 前缀）。**
+**Important: when pushing tasks from the client, the taskType must match the full pattern registered on the server (including the Namespace prefix).**
 
 ```go
 // internal/svc/servicecontext.go
@@ -710,7 +712,7 @@ func (l *OrderLogic) CreateOrder(req *types.OrderReq) error {
 }
 ```
 
-### 独立脚本中使用
+### Using in Standalone Scripts
 
 #### Server
 
@@ -750,6 +752,6 @@ func main() {
 }
 ```
 
-## 更新日志
+## Changelog
 
-查看 [CHANGELOG.md](./CHANGELOG.md)
+See [CHANGELOG.md](./CHANGELOG.md)

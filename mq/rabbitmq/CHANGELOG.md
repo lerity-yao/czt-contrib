@@ -1,85 +1,87 @@
 # Changelog
 
-所有版本变更记录。格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)。
+[中文](./changelog-cn.md)
+
+All version change logs. Format based on [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/).
 
 ## [0.1.5] - 2026-06-04
 
-### 依赖升级
+### Dependencies
 
 - `github.com/rabbitmq/amqp091-go` v1.10.0 → v1.11.0
 - `github.com/zeromicro/go-zero` v1.10.0 → v1.10.2
-- `go.opentelemetry.io/otel*` v1.24.0 → v1.40.0（主动不升 v1.44+，避免强制要求 go 1.25）
-- 同步 `go mod tidy` 清理无用 indirect 依赖
-- `go` directive 保持 1.24.0
+- `go.opentelemetry.io/otel*` v1.24.0 → v1.40.0 (intentionally not upgraded to v1.44+ to avoid forcing go 1.25)
+- Synced `go mod tidy` to clean up unused indirect dependencies
+- `go` directive remains 1.24.0
 
 ## [0.1.4] - 2026-03-20
 
-### 破坏性变更
+### Breaking Changes
 
-#### 1. MustNewSender 去掉 ctx 参数
+#### 1. MustNewSender Removed the ctx Parameter
 ```diff
 - rabbitmq.MustNewSender(ctx, conf)
 + rabbitmq.MustNewSender(conf)
 ```
-**说明**: 与 MustNewListener 保持一致，初始化时不需要 ctx
+**Description**: Consistent with MustNewListener; ctx is not required during initialization
 
 ## [0.1.3] - 2026-03-20
 
-### 新增功能
+### New Features
 
-#### 1. 连接可靠性增强
+#### 1. Connection Reliability Enhancements
 
-- **NotifyClose 监听**: Sender 和 Listener 同时监听 Connection 和 Channel 的关闭事件
-- **自动重连**: 连接断开后自动尝试重连（最多 10 次）
-- **线程安全**: 使用 `atomic.Bool` 保证 `closed` 标志线程安全
-- **双重检查**: 避免重复重连（加锁前检查 + 加锁后检查）
-- **优雅停机**: 收到 go-zero proc 停止信号后不再重连
+- **NotifyClose Listener**: Both Sender and Listener listen for Connection and Channel close events
+- **Auto Reconnect**: Automatically attempts to reconnect after disconnection (up to 10 times)
+- **Thread Safety**: Uses `atomic.Bool` to ensure thread safety of the `closed` flag
+- **Double-Checked Locking**: Avoids duplicate reconnections (pre-lock check + post-lock check)
+- **Graceful Shutdown**: Stops reconnecting after receiving the go-zero proc stop signal
 
-#### 2. Sender 优雅停机
-- 自动注册 `proc.AddShutdownListener` 关闭钩子
-- 停机时标记 `closed`，不再重连
+#### 2. Sender Graceful Shutdown
+- Automatically registers `proc.AddShutdownListener` shutdown hook
+- Marks `closed` on shutdown, preventing further reconnections
 
-#### 3. 监控指标大幅扩展
+#### 3. Greatly Expanded Metrics
 
-**Sender 指标（5个）**：
+**Sender Metrics (5)**:
 
-| 指标名 | 类型 | Labels | 说明 |
+| Metric Name | Type | Labels | Description |
 |--------|------|--------|------|
-| `rabbitmq_sender_send_total` | Counter | exchange, route_key, status | 发送总数 |
-| `rabbitmq_sender_send_duration_ms` | Histogram | exchange, route_key | 发送耗时 |
-| `rabbitmq_sender_send_size_bytes` | Histogram | exchange, route_key | 消息大小 |
-| `rabbitmq_sender_reconnect_total` | Counter | - | 重连次数 |
-| `rabbitmq_sender_disconnect_total` | Counter | - | 掉线次数 |
+| `rabbitmq_sender_send_total` | Counter | exchange, route_key, status | Total sends |
+| `rabbitmq_sender_send_duration_ms` | Histogram | exchange, route_key | Send duration |
+| `rabbitmq_sender_send_size_bytes` | Histogram | exchange, route_key | Message size |
+| `rabbitmq_sender_reconnect_total` | Counter | - | Number of reconnections |
+| `rabbitmq_sender_disconnect_total` | Counter | - | Number of disconnections |
 
-**Listener 指标（9个）**：
+**Listener Metrics (9)**:
 
-| 指标名 | 类型 | Labels | 说明 |
+| Metric Name | Type | Labels | Description |
 |--------|------|--------|------|
-| `rabbitmq_listener_consume_total` | Counter | queue, status | 消费总数 |
-| `rabbitmq_listener_consume_duration_ms` | Histogram | queue | 消费耗时 |
-| `rabbitmq_listener_consume_size_bytes` | Histogram | queue | 消息大小 |
-| `rabbitmq_listener_in_flight` | Gauge | queue | 当前处理中消息数 |
-| `rabbitmq_listener_parse_error_total` | Counter | queue | 解析失败数 |
-| `rabbitmq_listener_panic_total` | Counter | queue | Panic 次数 |
-| `rabbitmq_listener_ack_total` | Counter | queue, type | ACK/Reject 计数 |
-| `rabbitmq_listener_reconnect_total` | Counter | - | 重连次数 |
-| `rabbitmq_listener_disconnect_total` | Counter | - | 掉线次数 |
+| `rabbitmq_listener_consume_total` | Counter | queue, status | Total consumed |
+| `rabbitmq_listener_consume_duration_ms` | Histogram | queue | Consumption duration |
+| `rabbitmq_listener_consume_size_bytes` | Histogram | queue | Message size |
+| `rabbitmq_listener_in_flight` | Gauge | queue | Messages currently being processed |
+| `rabbitmq_listener_parse_error_total` | Counter | queue | Number of parse failures |
+| `rabbitmq_listener_panic_total` | Counter | queue | Number of panics |
+| `rabbitmq_listener_ack_total` | Counter | queue, type | ACK/Reject count |
+| `rabbitmq_listener_reconnect_total` | Counter | - | Number of reconnections |
+| `rabbitmq_listener_disconnect_total` | Counter | - | Number of disconnections |
 
-#### 4. 拦截器优化
-- 调整顺序为：`recovery → prometheus → logging → trace`
-- 确保所有拦截器都能执行（即使 trace 解析失败）
+#### 4. Interceptor Optimization
+- Order adjusted to: `recovery → prometheus → logging → trace`
+- Ensures all interceptors execute even if trace parsing fails
 
-#### 5. 其他优化
-- `StartConsumerSpan` 增加 carrier nil 防护
-- 消息解析移至 traceInterceptor，避免重复解析
-- ACK/Reject 逻辑统一放到 processMessage 外层
+#### 5. Other Improvements
+- `StartConsumerSpan` adds carrier nil protection
+- Message parsing moved to traceInterceptor to avoid duplicate parsing
+- ACK/Reject logic unified to the outer processMessage layer
 
-### 删除的功能
-- 删除 `client.go` 文件
-- 删除 `parseMessage` 方法（消息解析移至 traceInterceptor）
-- 删除 `requeueMessage` 重复消费逻辑
+### Removed
+- Removed `client.go`
+- Removed `parseMessage` method (message parsing moved to traceInterceptor)
+- Removed `requeueMessage` duplicate consumption logic
 
-#### 1. 指标名称变更
+#### 1. Metric Name Changes
 ```diff
 - mq_consume_total
 + rabbitmq_listener_consume_total
@@ -87,24 +89,24 @@
 - mq_consume_duration_ms
 + rabbitmq_listener_consume_duration_ms
 ```
-**影响**: 需要更新 Prometheus 查询和 Grafana 仪表盘
+**Impact**: Prometheus queries and Grafana dashboards need to be updated
 
-#### 2. client.go 已删除
+#### 2. client.go Removed
 ```diff
 - client, err := rabbitmq.NewClient(ctx, conf)
 + sender, err := rabbitmq.NewSender(conf)
-// 或
+// or
 + sender := rabbitmq.MustNewSender(conf)
 ```
 
-#### 3. Sender 自动注册 shutdown hook
-- `NewSender` 和 `MustNewSender` 会自动注册 `proc.AddShutdownListener`
-- 在 go-zero 环境下不需要手动调用 `Close()`
-- 非 go-zero 环境仍需手动调用 `Close()`
+#### 3. Sender Auto-Registers Shutdown Hook
+- `NewSender` and `MustNewSender` automatically register `proc.AddShutdownListener`
+- In the go-zero environment, there is no need to call `Close()` manually
+- Outside the go-zero environment, `Close()` still needs to be called manually
 
-#### 4. MustNewListener 去掉 ctx 参数
+#### 4. MustNewListener Removed the ctx Parameter
 ```diff
 - rabbitmq.MustNewListener(ctx, conf, handler)
 + rabbitmq.MustNewListener(conf, handler)
 ```
-**说明**: 消费者内部直接使用 `context.Background()` 派生，外部传入的 ctx 无实际作用
+**Description**: The consumer internally derives from `context.Background()`; the externally passed ctx has no practical effect

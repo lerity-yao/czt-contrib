@@ -1,90 +1,92 @@
 # gateway
 
-基于 [go-zero](https://github.com/zeromicro/go-zero) httpc 封装的阿里云 API 网关 Go 客户端，自动完成 **HMAC-SHA256 v1 签名**，内置**熔断器**。
+[中文](./readme-cn.md)
 
-## 特性
+A Go client for Alibaba Cloud API Gateway built on [go-zero](https://github.com/zeromicro/go-zero) httpc, with automatic **HMAC-SHA256 v1 signing** and built-in **circuit breaker**.
 
-- 🔐 **自动签名** — 每个请求自动注入 `X-Ca-*` 签名头（AppKey、Nonce、Timestamp、Signature），调用方无感知
-- 🔀 **双方法 API** — `Do` 处理结构化数据（JSON / form / path / header 自动映射），`DoRaw` 处理原始字节（文件上传、XML、纯文本等）
-- 🛡️ **熔断保护** — 底层使用 go-zero httpc，同一个 Host 自动共享熔断器，错误率过高自动熔断
-- 🔧 **可定制 HTTP Client** — 通过 `WithClient` 注入自定义 `*http.Client`（超时、TLS、连接池等），不传则使用 `http.DefaultClient`
+## Features
 
-## 安装
+- 🔐 **Auto Signing** — Automatically injects `X-Ca-*` signature headers (AppKey, Nonce, Timestamp, Signature) into every request, transparent to the caller
+- 🔀 **Dual-method API** — `Do` for structured data (JSON / form / path / header auto-mapping), `DoRaw` for raw bytes (file uploads, XML, plain text, etc.)
+- 🛡️ **Circuit Breaker** — Built on go-zero httpc, automatically shares circuit breakers per Host, trips when error rate is too high
+- 🔧 **Custom HTTP Client** — Inject a custom `*http.Client` via `WithClient` (timeout, TLS, connection pool, etc.); defaults to `http.DefaultClient` if not provided
+
+## Installation
 
 ```bash
 go get github.com/lerity-yao/czt-contrib/aliyun/gateway@v0.0.3
 ```
 
-## 配置参数
+## Configuration
 
 ### Conf
 
-| 参数名 | 类型 | 必填 | 说明 |
-|--------|------|------|------|
-| `Host` | string | 是 | 网关地址，必须以 `http://` 或 `https://` 开头 |
-| `AppKey` | string | 是 | API 网关应用的 AppKey |
-| `AppSecret` | string | 是 | API 网关应用的 AppSecret，用于 HMAC-SHA256 签名 |
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `Host` | string | Yes | Gateway address, must start with `http://` or `https://` |
+| `AppKey` | string | Yes | AppKey of the API Gateway application |
+| `AppSecret` | string | Yes | AppSecret of the API Gateway application, used for HMAC-SHA256 signing |
 
-调用 `NewClient` 时会自动执行 `Validate()` 校验上述字段。
+Calling `NewClient` automatically runs `Validate()` to verify the above fields.
 
-## API 参考
+## API Reference
 
-### 构造函数
+### Constructors
 
-| 函数 | 签名 | 说明 |
-|------|------|------|
-| `MustNewClient` | `func MustNewClient(c Conf, opts ...ClientOption) Client` | 创建 Client，校验失败 panic |
-| `NewClient` | `func NewClient(c Conf, opts ...ClientOption) (Client, error)` | 创建 Client，校验失败返回 error |
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `MustNewClient` | `func MustNewClient(c Conf, opts ...ClientOption) Client` | Create Client, panic on validation failure |
+| `NewClient` | `func NewClient(c Conf, opts ...ClientOption) (Client, error)` | Create Client, return error on validation failure |
 
 ### ClientOption
 
-| Option | 参数 | 说明 |
-|--------|------|------|
-| `WithClient` | `*http.Client` | 注入自定义 HTTP Client（超时、TLS、连接池等），不传则使用 `http.DefaultClient` |
+| Option | Parameter | Description |
+|--------|-----------|-------------|
+| `WithClient` | `*http.Client` | Inject a custom HTTP Client (timeout, TLS, connection pool, etc.); defaults to `http.DefaultClient` if not provided |
 
-### Client 接口方法
+### Client Interface Methods
 
-| 方法 | 签名 | 适用场景 |
-|------|------|----------|
-| `Do` | `Do(ctx, method, path string, data any) (*http.Response, error)` | 结构化请求：JSON body / form query / path 参数 / header 自动映射 |
-| `DoRaw` | `DoRaw(ctx, method, path, contentType string, body []byte) (*http.Response, error)` | 原始请求：文件上传、XML、纯文本、加密 payload 等自定义 body |
+| Method | Signature | Use Case |
+|--------|-----------|----------|
+| `Do` | `Do(ctx, method, path string, data any) (*http.Response, error)` | Structured requests: JSON body / form query / path params / header auto-mapping |
+| `DoRaw` | `DoRaw(ctx, method, path, contentType string, body []byte) (*http.Response, error)` | Raw requests: file uploads, XML, plain text, encrypted payloads, etc. |
 
-> **注意**：`DoRaw` 在 `body` 非空时**强制要求** `contentType` 非空，否则返回 error。无 body 的请求（如 GET）`contentType` 可为空。
+> **Note**: `DoRaw` **requires** a non-empty `contentType` when `body` is non-empty, otherwise it returns an error. For requests without a body (e.g., GET), `contentType` can be empty.
 
-### 响应解析
+### Response Parsing
 
-| 函数 | 签名 | 适用场景 |
-|------|------|----------|
-| `Parse` | `Parse(resp *http.Response, err error, val any) error` | JSON 响应：解析 header + body，自动关闭 Body |
+| Function | Signature | Use Case |
+|----------|-----------|----------|
+| `Parse` | `Parse(resp *http.Response, err error, val any) error` | JSON responses: parses header + body, automatically closes Body |
 
-`Parse` 内部委托 go-zero `httpc.Parse`，支持响应头（`header` tag）和 JSON body（`json` tag）解析。对于 XML、二进制等非 JSON 响应，请直接读取 `resp.Body`。
+`Parse` delegates to go-zero `httpc.Parse` internally, supporting response header (`header` tag) and JSON body (`json` tag) parsing. For non-JSON responses (XML, binary, etc.), read `resp.Body` directly.
 
-### 辅助函数
+### Helper Functions
 
-| 函数 | 签名 | 说明 |
-|------|------|------|
-| `NewMultipart` | `NewMultipart() *MultipartBuilder` | 构造 multipart/form-data 请求体 |
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `NewMultipart` | `NewMultipart() *MultipartBuilder` | Build a multipart/form-data request body |
 
-**MultipartBuilder 方法**
+**MultipartBuilder Methods**
 
-| 方法 | 说明 |
-|------|------|
-| `Field(name, value string)` | 添加文本字段 |
-| `File(name, filename string, content []byte)` | 添加文件字段 |
-| `Build() (contentType string, body []byte, err error)` | 返回 Content-Type、body 和错误，可直接传入 `DoRaw` |
+| Method | Description |
+|--------|-------------|
+| `Field(name, value string)` | Add a text field |
+| `File(name, filename string, content []byte)` | Add a file field |
+| `Build() (contentType string, body []byte, err error)` | Returns Content-Type, body, and error; can be passed directly to `DoRaw` |
 
-> HTTP 方法请直接使用标准库 `http.MethodGet`、`http.MethodPost` 等。
+> Use standard library `http.MethodGet`, `http.MethodPost`, etc. for HTTP methods.
 
-## 进阶指南
+## Advanced Guide
 
-### 签名机制
+### Signing Mechanism
 
-SDK 基于 [阿里云 API 网关 V1 签名算法](https://help.aliyun.com/document_detail/29475.html)，每个请求自动完成以下工作：
+The SDK is based on the [Alibaba Cloud API Gateway V1 signing algorithm](https://help.aliyun.com/document_detail/29475.html). Each request automatically performs the following:
 
-1. **设置默认头**（未设置时）：`Accept`、`Date`、`User-Agent`
-2. **计算 Content-MD5**：当 body 非空且 Content-Type 不是 form / multipart 时，计算 body 的 MD5 Base64 值
-3. **设置 X-Ca-* 头**：`X-Ca-Key`（AppKey）、`X-Ca-Nonce`（UUID）、`X-Ca-Signature-Method`（HmacSHA256）、`X-Ca-Timestamp`（毫秒时间戳）
-4. **构建待签名字符串**：
+1. **Set default headers** (when not already set): `Accept`, `Date`, `User-Agent`
+2. **Calculate Content-MD5**: When body is non-empty and Content-Type is not form / multipart, compute MD5 Base64 of the body
+3. **Set X-Ca-* headers**: `X-Ca-Key` (AppKey), `X-Ca-Nonce` (UUID), `X-Ca-Signature-Method` (HmacSHA256), `X-Ca-Timestamp` (millisecond timestamp)
+4. **Build the string to sign**:
 
 ```
 HTTPMethod\n
@@ -92,53 +94,53 @@ Accept\n
 Content-MD5\n
 Content-Type\n
 Date\n
-X-Ca-headers (按字典序排列的小写 key:value)\n
-URL (path + 按字典序排序的 query)
+X-Ca-headers (alphabetically sorted lowercase key:value)\n
+URL (path + alphabetically sorted query)
 ```
 
-5. **计算签名**：用 AppSecret 对待签名字符串做 HMAC-SHA256，结果 Base64 编码后放入 `X-Ca-Signature` 头
+5. **Calculate signature**: HMAC-SHA256 the string to sign with AppSecret, Base64-encode the result, and set it in the `X-Ca-Signature` header
 
-> **query 参数签名规则**：签名字符串中的 query 使用原始编码值（`r.URL.RawQuery`），按 key 字典序排序。相同 key 的参数仅取第一个 value；value 为空时仅保留 key（不含 `=`）。不解码也不重新编码，确保与网关服务端验证结果一致。
+> **Query parameter signing rules**: The query in the signing string uses the original encoded value (`r.URL.RawQuery`), sorted by key alphabetically. For duplicate keys, only the first value is taken; when the value is empty, only the key is kept (without `=`). No decoding or re-encoding is performed, ensuring consistency with the gateway server's verification.
 
-### Do 与 DoRaw 如何选择
+### Choosing Between Do and DoRaw
 
-| 场景 | 推荐方法 | 说明 |
-|------|----------|------|
-| POST JSON body | `Do` | struct 带 `json` tag，自动序列化 |
-| GET 带 query 参数 | `Do` | struct 带 `form` tag，自动拼 query string |
-| GET 带 path 参数 | `Do` | struct 带 `path` tag，自动填充 `:id` |
-| 设置自定义 header | `Do` | struct 带 `header` tag |
-| GET 无参数 | `Do` | data 传 `nil` |
-| 文件上传（multipart） | `DoRaw` | 使用 `NewMultipart()` 构造，或手动构建 |
-| XML body | `DoRaw` | 传 XML 字符串的字节 |
-| 纯文本 / 加密 payload | `DoRaw` | 传原始字节 |
-| 表单（手动编码） | `DoRaw` | 传已编码的字节 |
+| Scenario | Recommended Method | Description |
+|----------|-------------------|-------------|
+| POST JSON body | `Do` | Struct with `json` tag, auto-serialized |
+| GET with query params | `Do` | Struct with `form` tag, auto-assembled query string |
+| GET with path params | `Do` | Struct with `path` tag, auto-fills `:id` |
+| Set custom headers | `Do` | Struct with `header` tag |
+| GET without params | `Do` | Pass `nil` for data |
+| File upload (multipart) | `DoRaw` | Build with `NewMultipart()`, or manually |
+| XML body | `DoRaw` | Pass XML string as bytes |
+| Plain text / encrypted payload | `DoRaw` | Pass raw bytes |
+| Form (manually encoded) | `DoRaw` | Pass pre-encoded bytes |
 
-### Do 的 data 参数 Tag 说明
+### Do's data Parameter Tag Reference
 
-`Do` 内部委托 go-zero httpc `buildRequest`，通过 struct tag 自动映射：
+`Do` delegates to go-zero httpc `buildRequest`, which auto-maps via struct tags:
 
-| Tag | 作用 | 示例 |
-|-----|------|------|
-| `path:"id"` | 填充 URL 路径参数 `:id` | `/v1/users/:id` → `/v1/users/123` |
-| `form:"page"` | 拼接到 query string | `?page=1` |
-| `json:"name"` | JSON body 字段 | `{"name":"tom"}` |
-| `header:"X-Token"` | 请求头 | `X-Token: abc` |
+| Tag | Purpose | Example |
+|-----|---------|---------|
+| `path:"id"` | Fill URL path parameter `:id` | `/v1/users/:id` → `/v1/users/123` |
+| `form:"page"` | Append to query string | `?page=1` |
+| `json:"name"` | JSON body field | `{"name":"tom"}` |
+| `header:"X-Token"` | Request header | `X-Token: abc` |
 
-> 当 struct 含 `json` tag 时，httpc 自动设置 `Content-Type: application/json`。GET / HEAD 方法不允许带 body。
+> When the struct has a `json` tag, httpc automatically sets `Content-Type: application/json`. GET / HEAD methods must not have a body.
 
-### 超时控制
+### Timeout Control
 
-SDK 遵循 go-zero httpc 惯例，**不设 `http.Client.Timeout`，超时完全由 `context.Context` 控制**。
+The SDK follows go-zero httpc conventions — **no `http.Client.Timeout` is set; timeouts are fully controlled by `context.Context`**.
 
-在 go-zero 框架中，调用方传入的 `ctx` 已自带 deadline（由 `rest.RestConf.Timeout` 注入），会自动传播到每个请求，无需额外处理：
+In the go-zero framework, the `ctx` passed by the caller already has a deadline (injected by `rest.RestConf.Timeout`), which automatically propagates to each request with no extra handling needed:
 
 ```go
-// go-zero handler 中，l.ctx 已有 RestConf.Timeout 的 deadline
+// In a go-zero handler, l.ctx already has RestConf.Timeout's deadline
 resp, err := l.svcCtx.Gateway.Do(l.ctx, http.MethodPost, "/v1/users", data)
 ```
 
-如果在非 go-zero 环境中使用，请通过 `context.WithTimeout` 传入 deadline：
+When used outside go-zero, pass a deadline via `context.WithTimeout`:
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -147,11 +149,11 @@ defer cancel()
 resp, err := client.Do(ctx, http.MethodPost, "/v1/users", data)
 ```
 
-> **注意**：不要在自定义 `*http.Client` 上设置 `Timeout`。如果 `http.Client.Timeout` 早于 context deadline 到期，会覆盖调用方意图中的超时时间，导致行为与预期不一致。
+> **Note**: Do not set `Timeout` on a custom `*http.Client`. If `http.Client.Timeout` expires before the context deadline, it overrides the caller's intended timeout, causing inconsistent behavior.
 
-## 完整示例
+## Full Examples
 
-### 创建客户端
+### Create a Client
 
 ```go
 import "github.com/lerity-yao/czt-contrib/aliyun/gateway"
@@ -163,10 +165,10 @@ client := gateway.MustNewClient(gateway.Conf{
 })
 ```
 
-### Do：结构化请求
+### Do: Structured Requests
 
 ```go
-// 1. POST JSON body + 解析响应
+// 1. POST JSON body + parse response
 type CreateUserReq struct {
     Name  string `json:"name"`
     Email string `json:"email"`
@@ -183,17 +185,17 @@ var result struct {
 if err := gateway.Parse(resp, err, &result); err != nil {
     return err
 }
-// result.ID == 123，resp.Body 已自动关闭
+// result.ID == 123, resp.Body is automatically closed
 ```
 
 ```go
-// 2. GET 带 path + query 参数
+// 2. GET with path + query params
 type GetUserReq struct {
     ID   string `path:"id"`
     Page int    `form:"page"`
 }
 
-// 自动填充：GET /v1/users/123?page=1
+// Auto-fills: GET /v1/users/123?page=1
 resp, err := client.Do(ctx, http.MethodGet, "/v1/users/:id", GetUserReq{
     ID:   "123",
     Page: 1,
@@ -202,15 +204,15 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 3. GET 无参数，data 传 nil
+// 3. GET without params, pass nil for data
 resp, err := client.Do(ctx, http.MethodGet, "/v1/users", nil)
 defer resp.Body.Close()
 ```
 
-### DoRaw：原始请求
+### DoRaw: Raw Requests
 
 ```go
-// 1. JSON 原始字节
+// 1. Raw JSON bytes
 jsonBody, _ := json.Marshal(map[string]any{"name": "tom"})
 resp, err := client.DoRaw(ctx, http.MethodPost, "/v1/users",
     "application/json", jsonBody)
@@ -226,7 +228,7 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 3. 文件上传（multipart）— 使用 MultipartBuilder
+// 3. File upload (multipart) — using MultipartBuilder
 ct, body, err := gateway.NewMultipart().
     Field("description", "avatar").
     File("file", "test.png", fileBytes).
@@ -240,7 +242,7 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 3b. 文件上传（multipart）— 原生写法
+// 3b. File upload (multipart) — native approach
 multipartBody := &bytes.Buffer{}
 writer := multipart.NewWriter(multipartBody)
 part, _ := writer.CreateFormFile("file", "test.png")
@@ -253,12 +255,12 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 4. GET 无 body，contentType 传空
+// 4. GET without body, pass empty contentType
 resp, err := client.DoRaw(ctx, http.MethodGet, "/v1/users", "", nil)
 defer resp.Body.Close()
 ```
 
-### 自定义 HTTP Client
+### Custom HTTP Client
 
 ```go
 import "net/http"
@@ -274,7 +276,7 @@ cli := &http.Client{
 client := gateway.MustNewClient(conf, gateway.WithClient(cli))
 ```
 
-### 在 go-zero 中使用
+### Using with go-zero
 
 ```go
 // internal/config/config.go
@@ -326,11 +328,11 @@ func (l *CreateUserLogic) CreateUser(req *types.CreateUserReq) error {
     }
     defer resp.Body.Close()
 
-    // 处理响应...
+    // Process response...
     return nil
 }
 ```
 
-## 更新日志
+## Changelog
 
-查看 [CHANGELOG.md](./CHANGELOG.md)
+See [CHANGELOG.md](./CHANGELOG.md)

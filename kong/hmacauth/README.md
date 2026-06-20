@@ -1,84 +1,86 @@
 # hmacauth
 
-基于 [go-zero](https://github.com/zeromicro/go-zero) httpc 封装的 Kong HMAC Auth Go 客户端，自动完成 **HMAC 签名**，内置**熔断器**。
+[中文](./readme-cn.md)
 
-遵循 [Kong HMAC Auth 插件](https://developer.konghq.com/plugins/hmac-auth/) 官方规范（基于 [draft-cavage-http-signatures](https://tools.ietf.org/html/draft-cavage-http-signatures) 草案，使用 `@request-target` 伪头）。
+A Go client for Kong HMAC Auth built on [go-zero](https://github.com/zeromicro/go-zero) httpc, with automatic **HMAC signing** and built-in **circuit breaker**.
 
-## 特性
+Follows the official [Kong HMAC Auth plugin](https://developer.konghq.com/plugins/hmac-auth/) specification (based on [draft-cavage-http-signatures](https://tools.ietf.org/html/draft-cavage-http-signatures) draft, using the `@request-target` pseudo-header).
 
-- 🔐 **自动签名** — 每个请求自动注入 `Authorization` 签名头（`hmac username="...", algorithm="...", headers="...", signature="..."`），调用方无感知
-- 🔀 **双方法 API** — `Do` 处理结构化数据（JSON / form / path / header 自动映射），`DoRaw` 处理原始字节（文件上传、XML、纯文本等）
-- 🛡️ **熔断保护** — 底层使用 go-zero httpc，同一个 Host 自动共享熔断器，错误率过高自动熔断
-- 🔧 **可定制 HTTP Client** — 通过 `WithClient` 注入自定义 `*http.Client`（超时、TLS、连接池等），不传则使用 `http.DefaultClient`
-- 🧩 **多算法支持** — `hmac-sha1`、`hmac-sha224`、`hmac-sha256`、`hmac-sha384`、`hmac-sha512` 五种算法全覆盖
-- 📋 **灵活签名头** — 支持自定义参与签名的 header 列表，默认 `["date", "@request-target"]`
-- 📦 **Body 完整性** — 当 `Headers` 包含 `digest` 时，自动计算 `Digest: SHA-256=...` 头（含空 body 场景）
+## Features
 
-## 安装
+- 🔐 **Auto Signing** — Automatically injects `Authorization` signature header (`hmac username="...", algorithm="...", headers="...", signature="..."`) into every request, transparent to the caller
+- 🔀 **Dual-method API** — `Do` for structured data (JSON / form / path / header auto-mapping), `DoRaw` for raw bytes (file uploads, XML, plain text, etc.)
+- 🛡️ **Circuit Breaker** — Built on go-zero httpc, automatically shares circuit breakers per Host, trips when error rate is too high
+- 🔧 **Custom HTTP Client** — Inject a custom `*http.Client` via `WithClient` (timeout, TLS, connection pool, etc.); defaults to `http.DefaultClient` if not provided
+- 🧩 **Multi-algorithm Support** — Full coverage of five algorithms: `hmac-sha1`, `hmac-sha224`, `hmac-sha256`, `hmac-sha384`, `hmac-sha512`
+- 📋 **Flexible Signing Headers** — Supports custom header lists for signing; defaults to `["date", "@request-target"]`
+- 📦 **Body Integrity** — When `Headers` includes `digest`, automatically computes `Digest: SHA-256=...` header (including empty body scenarios)
+
+## Installation
 
 ```bash
 go get github.com/lerity-yao/czt-contrib/kong/hmacauth@v0.0.1
 ```
 
-## 配置参数
+## Configuration
 
 ### Conf
 
-| 参数名 | 类型 | 必填 | 默认值 | 说明 |
-|--------|------|------|--------|------|
-| `Host` | string | 是 | — | Kong 网关地址，必须以 `http://` 或 `https://` 开头 |
-| `Username` | string | 是 | — | Kong consumer 凭证用户名（即 key id） |
-| `Secret` | string | 是 | — | HMAC 签名密钥 |
-| `Algorithm` | string | 否 | `hmac-sha256` | 签名算法，支持 `hmac-sha1` / `hmac-sha224` / `hmac-sha256` / `hmac-sha384` / `hmac-sha512` |
-| `Headers` | []string | 否 | `["date", "@request-target"]` | 参与签名的 header 列表（小写），支持标准 HTTP header 和 `@request-target` 伪头 |
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `Host` | string | Yes | — | Kong gateway address, must start with `http://` or `https://` |
+| `Username` | string | Yes | — | Kong consumer credential username (i.e., key id) |
+| `Secret` | string | Yes | — | HMAC signing secret |
+| `Algorithm` | string | No | `hmac-sha256` | Signing algorithm; supports `hmac-sha1` / `hmac-sha224` / `hmac-sha256` / `hmac-sha384` / `hmac-sha512` |
+| `Headers` | []string | No | `["date", "@request-target"]` | Header list to include in signing (lowercase); supports standard HTTP headers and `@request-target` pseudo-header |
 
-调用 `NewClient` 时会自动执行 `Validate()` 校验上述字段，并为 `Algorithm` 和 `Headers` 填充默认值。
+Calling `NewClient` automatically runs `Validate()` to verify the above fields and fills in default values for `Algorithm` and `Headers`.
 
-> `Algorithm` 和 `Headers` 支持 go-zero `conf.MustLoad` 的 `optional` / `default` tag，YAML 配置文件中可省略。
+> `Algorithm` and `Headers` support go-zero `conf.MustLoad` `optional` / `default` tags; they can be omitted in YAML configuration files.
 
-## API 参考
+## API Reference
 
-### 构造函数
+### Constructors
 
-| 函数 | 签名 | 说明 |
-|------|------|------|
-| `MustNewClient` | `func MustNewClient(c Conf, opts ...ClientOption) Client` | 创建 Client，校验失败 panic |
-| `NewClient` | `func NewClient(c Conf, opts ...ClientOption) (Client, error)` | 创建 Client，校验失败返回 error |
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `MustNewClient` | `func MustNewClient(c Conf, opts ...ClientOption) Client` | Create Client, panic on validation failure |
+| `NewClient` | `func NewClient(c Conf, opts ...ClientOption) (Client, error)` | Create Client, return error on validation failure |
 
 ### ClientOption
 
-| Option | 参数 | 说明 |
-|--------|------|------|
-| `WithClient` | `*http.Client` | 注入自定义 HTTP Client（超时、TLS、连接池等），不传则使用 `http.DefaultClient` |
+| Option | Parameter | Description |
+|--------|-----------|-------------|
+| `WithClient` | `*http.Client` | Inject a custom HTTP Client (timeout, TLS, connection pool, etc.); defaults to `http.DefaultClient` if not provided |
 
-### Client 接口方法
+### Client Interface Methods
 
-| 方法 | 签名 | 适用场景 |
-|------|------|----------|
-| `Do` | `Do(ctx, method, path string, data any) (*http.Response, error)` | 结构化请求：JSON body / form query / path 参数 / header 自动映射 |
-| `DoRaw` | `DoRaw(ctx, method, path, contentType string, body []byte) (*http.Response, error)` | 原始请求：文件上传、XML、纯文本、加密 payload 等自定义 body |
+| Method | Signature | Use Case |
+|--------|-----------|----------|
+| `Do` | `Do(ctx, method, path string, data any) (*http.Response, error)` | Structured requests: JSON body / form query / path params / header auto-mapping |
+| `DoRaw` | `DoRaw(ctx, method, path, contentType string, body []byte) (*http.Response, error)` | Raw requests: file uploads, XML, plain text, encrypted payloads, etc. |
 
-> **注意**：`DoRaw` 在 `body` 非空时**强制要求** `contentType` 非空，否则返回 error。无 body 的请求（如 GET）`contentType` 可为空。
+> **Note**: `DoRaw` **requires** a non-empty `contentType` when `body` is non-empty, otherwise it returns an error. For requests without a body (e.g., GET), `contentType` can be empty.
 
-### 响应解析
+### Response Parsing
 
-| 函数 | 签名 | 适用场景 |
-|------|------|----------|
-| `Parse` | `Parse(resp *http.Response, err error, val any) error` | JSON 响应：解析 header + body，自动关闭 Body |
+| Function | Signature | Use Case |
+|----------|-----------|----------|
+| `Parse` | `Parse(resp *http.Response, err error, val any) error` | JSON responses: parses header + body, automatically closes Body |
 
-`Parse` 内部委托 go-zero `httpc.Parse`，支持响应头（`header` tag）和 JSON body（`json` tag）解析。对于 XML、二进制等非 JSON 响应，请直接读取 `resp.Body`。
+`Parse` delegates to go-zero `httpc.Parse` internally, supporting response header (`header` tag) and JSON body (`json` tag) parsing. For non-JSON responses (XML, binary, etc.), read `resp.Body` directly.
 
-> HTTP 方法请直接使用标准库 `http.MethodGet`、`http.MethodPost` 等。
+> Use standard library `http.MethodGet`, `http.MethodPost`, etc. for HTTP methods.
 
-## 进阶指南
+## Advanced Guide
 
-### 签名机制
+### Signing Mechanism
 
-SDK 基于 [Kong HMAC Auth 插件](https://developer.konghq.com/plugins/hmac-auth/) 官方规范，每个请求自动完成以下工作：
+The SDK follows the official [Kong HMAC Auth plugin](https://developer.konghq.com/plugins/hmac-auth/) specification. Each request automatically performs the following:
 
-1. **设置默认头**（未设置时）：`Date`（GMT 格式）、`User-Agent`、`Host`（当 host 在签名列表中时）
-2. **计算 Digest**（当 `Headers` 包含 `digest` 时）：对非 form / multipart 的 body 计算 `SHA-256`，格式为 `Digest: SHA-256=<base64>`；空 body 也计算零长度摘要
-3. **构建待签名字符串**：按 `Headers` 列表顺序拼接，每行格式为 `header-name: value`，行间用 `\n` 分隔，最后一行无尾随换行
+1. **Set default headers** (when not already set): `Date` (GMT format), `User-Agent`, `Host` (when host is in the signing list)
+2. **Calculate Digest** (when `Headers` includes `digest`): Compute `SHA-256` of non-form / non-multipart body, formatted as `Digest: SHA-256=<base64>`; empty body also computes a zero-length digest
+3. **Build the string to sign**: Concatenate in `Headers` list order, each line formatted as `header-name: value`, separated by `\n`, with no trailing newline on the last line
 
 ```
 date: Thu, 22 Jun 2023 17:15:21 GMT
@@ -87,26 +89,26 @@ host: api.example.com
 digest: SHA-256=47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=
 ```
 
-4. **计算签名**：用 `Secret` 对待签名字符串做 HMAC（算法由 `Algorithm` 指定），结果 Base64 编码
-5. **设置 Authorization 头**：
+4. **Calculate signature**: HMAC the string to sign with `Secret` (algorithm specified by `Algorithm`), Base64-encode the result
+5. **Set Authorization header**:
 
 ```
 Authorization: hmac username="alice", algorithm="hmac-sha256", headers="date @request-target", signature="abc123..."
 ```
 
-### @request-target 伪头
+### @request-target Pseudo-header
 
-Kong HMAC Auth 使用 `@request-target` 作为伪头表示请求目标行，值为 `method /path?query`（method 全小写）：
+Kong HMAC Auth uses `@request-target` as a pseudo-header to represent the request target line, with the value `method /path?query` (method in lowercase):
 
 ```
 @request-target: post /v1/users?name=tom
 ```
 
-> Kong 官方推荐使用 `@request-target` 而非旧版的 `request-line`。
+> Kong officially recommends using `@request-target` instead of the legacy `request-line`.
 
-### 签名头列表配置
+### Signing Header List Configuration
 
-`Headers` 决定哪些 header 参与签名。默认只签 `date` 和 `@request-target`，Kong 官方推荐的强签名配置为 `@request-target` + `host` + `date`：
+`Headers` determines which headers participate in signing. By default, only `date` and `@request-target` are signed. Kong's recommended strong signing configuration is `@request-target` + `host` + `date`:
 
 ```go
 hmacauth.Conf{
@@ -117,67 +119,67 @@ hmacauth.Conf{
 }
 ```
 
-常见 header 选项：
+Common header options:
 
-| Header | 说明 |
-|--------|------|
-| `date` | 请求时间（GMT 格式），Kong 用此做 clock skew 校验 |
-| `host` | 请求目标主机 |
-| `@request-target` | 请求方法 + 路径 + 查询参数 |
-| `digest` | 请求体 SHA-256 摘要，用于 body 完整性校验 |
-| 自定义 header | 如 `x-request-id`、`x-custom-header` 等 |
+| Header | Description |
+|--------|-------------|
+| `date` | Request time (GMT format), used by Kong for clock skew validation |
+| `host` | Request target host |
+| `@request-target` | Request method + path + query parameters |
+| `digest` | Request body SHA-256 digest for body integrity verification |
+| Custom header | e.g., `x-request-id`, `x-custom-header`, etc. |
 
-> 当 `Headers` 包含 `digest` 且 Kong 端启用了 `validate_request_body` 时，SDK 会自动计算并注入 `Digest` 头。form / multipart body 跳过 Digest 计算。
+> When `Headers` includes `digest` and Kong has `validate_request_body` enabled, the SDK automatically computes and injects the `Digest` header. Form / multipart bodies skip Digest computation.
 
-### 支持的算法
+### Supported Algorithms
 
-| 算法 | 常量 | 说明 |
-|------|------|------|
-| `hmac-sha1` | `AlgorithmHmacSHA1` | SHA-1，Kong 默认禁用，不推荐使用 |
-| `hmac-sha224` | `AlgorithmHmacSHA224` | 需要 Kong 3.14+ |
-| `hmac-sha256` | `AlgorithmHmacSHA256` | **推荐默认** |
+| Algorithm | Constant | Description |
+|-----------|----------|-------------|
+| `hmac-sha1` | `AlgorithmHmacSHA1` | SHA-1, disabled by default in Kong, not recommended |
+| `hmac-sha224` | `AlgorithmHmacSHA224` | Requires Kong 3.14+ |
+| `hmac-sha256` | `AlgorithmHmacSHA256` | **Recommended default** |
 | `hmac-sha384` | `AlgorithmHmacSHA384` | |
 | `hmac-sha512` | `AlgorithmHmacSHA512` | |
 
-### Do 与 DoRaw 如何选择
+### Choosing Between Do and DoRaw
 
-| 场景 | 推荐方法 | 说明 |
-|------|----------|------|
-| POST JSON body | `Do` | struct 带 `json` tag，自动序列化 |
-| GET 带 query 参数 | `Do` | struct 带 `form` tag，自动拼 query string |
-| GET 带 path 参数 | `Do` | struct 带 `path` tag，自动填充 `:id` |
-| 设置自定义 header | `Do` | struct 带 `header` tag |
-| GET 无参数 | `Do` | data 传 `nil` |
-| 文件上传（multipart） | `DoRaw` | 手动构建 multipart body |
-| XML body | `DoRaw` | 传 XML 字符串的字节 |
-| 纯文本 / 加密 payload | `DoRaw` | 传原始字节 |
-| 表单（手动编码） | `DoRaw` | 传已编码的字节 |
+| Scenario | Recommended Method | Description |
+|----------|-------------------|-------------|
+| POST JSON body | `Do` | Struct with `json` tag, auto-serialized |
+| GET with query params | `Do` | Struct with `form` tag, auto-assembled query string |
+| GET with path params | `Do` | Struct with `path` tag, auto-fills `:id` |
+| Set custom headers | `Do` | Struct with `header` tag |
+| GET without params | `Do` | Pass `nil` for data |
+| File upload (multipart) | `DoRaw` | Build multipart body manually |
+| XML body | `DoRaw` | Pass XML string as bytes |
+| Plain text / encrypted payload | `DoRaw` | Pass raw bytes |
+| Form (manually encoded) | `DoRaw` | Pass pre-encoded bytes |
 
-### Do 的 data 参数 Tag 说明
+### Do's data Parameter Tag Reference
 
-`Do` 内部委托 go-zero httpc `buildRequest`，通过 struct tag 自动映射：
+`Do` delegates to go-zero httpc `buildRequest`, which auto-maps via struct tags:
 
-| Tag | 作用 | 示例 |
-|-----|------|------|
-| `path:"id"` | 填充 URL 路径参数 `:id` | `/v1/users/:id` → `/v1/users/123` |
-| `form:"page"` | 拼接到 query string | `?page=1` |
-| `json:"name"` | JSON body 字段 | `{"name":"tom"}` |
-| `header:"X-Token"` | 请求头 | `X-Token: abc` |
+| Tag | Purpose | Example |
+|-----|---------|---------|
+| `path:"id"` | Fill URL path parameter `:id` | `/v1/users/:id` → `/v1/users/123` |
+| `form:"page"` | Append to query string | `?page=1` |
+| `json:"name"` | JSON body field | `{"name":"tom"}` |
+| `header:"X-Token"` | Request header | `X-Token: abc` |
 
-> 当 struct 含 `json` tag 时，httpc 自动设置 `Content-Type: application/json`。GET / HEAD 方法不允许带 body。
+> When the struct has a `json` tag, httpc automatically sets `Content-Type: application/json`. GET / HEAD methods must not have a body.
 
-### 超时控制
+### Timeout Control
 
-SDK 遵循 go-zero httpc 惯例，**不设 `http.Client.Timeout`，超时完全由 `context.Context` 控制**。
+The SDK follows go-zero httpc conventions — **no `http.Client.Timeout` is set; timeouts are fully controlled by `context.Context`**.
 
-在 go-zero 框架中，调用方传入的 `ctx` 已自带 deadline（由 `rest.RestConf.Timeout` 注入），会自动传播到每个请求，无需额外处理：
+In the go-zero framework, the `ctx` passed by the caller already has a deadline (injected by `rest.RestConf.Timeout`), which automatically propagates to each request with no extra handling needed:
 
 ```go
-// go-zero handler 中，l.ctx 已有 RestConf.Timeout 的 deadline
+// In a go-zero handler, l.ctx already has RestConf.Timeout's deadline
 resp, err := l.svcCtx.Kong.Do(l.ctx, http.MethodGet, "/v1/users", nil)
 ```
 
-如果在非 go-zero 环境中使用，请通过 `context.WithTimeout` 传入 deadline：
+When used outside go-zero, pass a deadline via `context.WithTimeout`:
 
 ```go
 ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -186,11 +188,11 @@ defer cancel()
 resp, err := client.Do(ctx, http.MethodGet, "/v1/users", nil)
 ```
 
-> **注意**：不要在自定义 `*http.Client` 上设置 `Timeout`。如果 `http.Client.Timeout` 早于 context deadline 到期，会覆盖调用方意图中的超时时间，导致行为与预期不一致。
+> **Note**: Do not set `Timeout` on a custom `*http.Client`. If `http.Client.Timeout` expires before the context deadline, it overrides the caller's intended timeout, causing inconsistent behavior.
 
-## 完整示例
+## Full Examples
 
-### 创建客户端
+### Create a Client
 
 ```go
 import "github.com/lerity-yao/czt-contrib/kong/hmacauth"
@@ -202,7 +204,7 @@ client := hmacauth.MustNewClient(hmacauth.Conf{
 })
 ```
 
-### 自定义算法和签名头
+### Custom Algorithm and Signing Headers
 
 ```go
 client := hmacauth.MustNewClient(hmacauth.Conf{
@@ -214,10 +216,10 @@ client := hmacauth.MustNewClient(hmacauth.Conf{
 })
 ```
 
-### Do：结构化请求
+### Do: Structured Requests
 
 ```go
-// 1. POST JSON body + 解析响应
+// 1. POST JSON body + parse response
 type CreateUserReq struct {
     Name  string `json:"name"`
     Email string `json:"email"`
@@ -234,17 +236,17 @@ var result struct {
 if err := hmacauth.Parse(resp, err, &result); err != nil {
     return err
 }
-// result.ID == 123，resp.Body 已自动关闭
+// result.ID == 123, resp.Body is automatically closed
 ```
 
 ```go
-// 2. GET 带 path + query 参数
+// 2. GET with path + query params
 type GetUserReq struct {
     ID   string `path:"id"`
     Page int    `form:"page"`
 }
 
-// 自动填充：GET /v1/users/123?page=1
+// Auto-fills: GET /v1/users/123?page=1
 resp, err := client.Do(ctx, http.MethodGet, "/v1/users/:id", GetUserReq{
     ID:   "123",
     Page: 1,
@@ -253,15 +255,15 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 3. GET 无参数，data 传 nil
+// 3. GET without params, pass nil for data
 resp, err := client.Do(ctx, http.MethodGet, "/v1/users", nil)
 defer resp.Body.Close()
 ```
 
-### DoRaw：原始请求
+### DoRaw: Raw Requests
 
 ```go
-// 1. JSON 原始字节
+// 1. Raw JSON bytes
 jsonBody, _ := json.Marshal(map[string]any{"name": "tom"})
 resp, err := client.DoRaw(ctx, http.MethodPost, "/v1/users",
     "application/json", jsonBody)
@@ -277,7 +279,7 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 3. 文件上传（multipart）
+// 3. File upload (multipart)
 multipartBody := &bytes.Buffer{}
 writer := multipart.NewWriter(multipartBody)
 part, _ := writer.CreateFormFile("file", "test.png")
@@ -290,12 +292,12 @@ defer resp.Body.Close()
 ```
 
 ```go
-// 4. GET 无 body，contentType 传空
+// 4. GET without body, pass empty contentType
 resp, err := client.DoRaw(ctx, http.MethodGet, "/v1/users", "", nil)
 defer resp.Body.Close()
 ```
 
-### 自定义 HTTP Client
+### Custom HTTP Client
 
 ```go
 import "net/http"
@@ -311,7 +313,7 @@ cli := &http.Client{
 client := hmacauth.MustNewClient(conf, hmacauth.WithClient(cli))
 ```
 
-### 在 go-zero 中使用
+### Using with go-zero
 
 ```go
 // internal/config/config.go
@@ -331,7 +333,7 @@ Kong:
   Host: https://api.example.com
   Username: alice
   Secret: my-secret
-  # Algorithm 和 Headers 可省略，使用默认值
+  # Algorithm and Headers can be omitted, using defaults
   # Algorithm: hmac-sha256
   # Headers:
   #   - date
@@ -370,11 +372,11 @@ func (l *CreateUserLogic) CreateUser(req *types.CreateUserReq) error {
     }
     defer resp.Body.Close()
 
-    // 处理响应...
+    // Process response...
     return nil
 }
 ```
 
-## 更新日志
+## Changelog
 
-查看 [CHANGELOG.md](./CHANGELOG.md)
+See [CHANGELOG.md](./CHANGELOG.md)

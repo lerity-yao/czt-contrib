@@ -1,159 +1,161 @@
 # cztctl
 
-go-zero 官方 goctl 的增强版代码生成工具，作为独立模块发布。在保持与 goctl 兼容的基础上，扩展了 Swagger 文档生成、RabbitMQ 消费者服务生成、分布式定时任务服务生成等能力。
+[中文](./readme-cn.md)
 
-cztctl 语法高亮插件 [cztctl-intellij](https://github.com/lerity-yao/cztctl-intellij)
+An enhanced code generation tool based on the official go-zero `goctl`, published as a standalone module. It maintains full compatibility with goctl while extending capabilities including Swagger documentation generation, RabbitMQ consumer service generation, and distributed cron job service generation.
 
-插件进入 goland 插件市场搜索 cztctl，安装即可使用
+Syntax highlighting plugin: [cztctl-intellij](https://github.com/lerity-yao/cztctl-intellij)
 
-## 安装
+Search for `cztctl` in the GoLand plugin marketplace to install.
+
+## Installation
 
 ```bash
 go install github.com/lerity-yao/czt-contrib/cztctl@latest
 ```
 
-验证安装：
+Verify installation:
 
 ```bash
 cztctl --version
 # cztctl version 1.10.2 linux/amd64 (go-zero v1.10.0)
 ```
 
-## 命令一览
+## Command Overview
 
 ```
-cztctl api swagger    从 .api 文件生成 Swagger 文档
-cztctl api cron       从 .cron 文件生成分布式定时任务服务
-cztctl api rabbitmq   从 .rabbitmq 文件生成 RabbitMQ 消费者服务
-cztctl env            查看或编辑 cztctl 环境变量
-cztctl rpc sdk        生成 RPC 客户端 SDK 并发布到独立 Git 仓库
+cztctl api swagger    Generate Swagger documentation from a .api file
+cztctl api cron       Generate a distributed cron job service from a .cron file
+cztctl api rabbitmq   Generate a RabbitMQ consumer service from a .rabbitmq file
+cztctl env            View or edit cztctl environment variables
+cztctl rpc sdk        Generate an RPC client SDK and publish it to a standalone Git repository
 ```
 
 ## api swagger
 
-从 go-zero 标准 `.api` 文件生成 Swagger 2.0 文档，增强支持 `validate` tag 自动注释和字段头部多行注释解析。
+Generate Swagger 2.0 documentation from a standard go-zero `.api` file, with enhanced support for automatic `validate` tag annotations and multi-line field header comment parsing.
 
 ```bash
 cztctl api swagger -api user.api -dir . -filename user-api.json
 ```
 
-| 参数 | 说明 |
+| Flag | Description |
 |---|---|
-| `-api` | .api 文件路径 |
-| `-dir` | 输出目录 |
-| `-filename` | 输出文件名 |
-| `--yaml` | 输出 YAML 格式 |
+| `-api` | Path to the .api file |
+| `-dir` | Output directory |
+| `-filename` | Output filename |
+| `--yaml` | Output in YAML format |
 
-### info 块支持的属性
+### Supported `info` Block Properties
 
-在 `.api` 文件的 `info()` 块中，以下属性会直接映射到 Swagger 文档（与 go-zero 一致）：
+The following properties in the `info()` block of a `.api` file are mapped directly to the Swagger document (consistent with go-zero):
 
-| 属性 | 说明 | 示例 |
+| Property | Description | Example |
 |---|---|---|
-| `title` | 文档标题 | `title: "用户服务"` |
-| `description` | 文档描述 | `description: "用户相关接口"` |
-| `version` | API 版本号 | `version: "1.0"` |
-| `termsOfService` | 服务条款 URL | `termsOfService: "https://..."` |
-| `contactName` | 联系人姓名 | `contactName: "张三"` |
-| `contactURL` | 联系人 URL | `contactURL: "https://..."` |
-| `contactEmail` | 联系人邮箱 | `contactEmail: "a@b.com"` |
-| `licenseName` | 许可证名称 | `licenseName: "MIT"` |
-| `licenseURL` | 许可证 URL | `licenseURL: "https://..."` |
-| `host` | API 主机地址 | `host: "api.example.com"` |
-| `basePath` | API 基础路径 | `basePath: "/v1"` |
-| `schemes` | 协议（逗号分隔） | `schemes: "https,http"` |
-| `produces` | 响应 Content-Type | `produces: "application/json"` |
-| `consumes` | 请求 Content-Type | `consumes: "application/json"` |
-| `useDefinitions` | 是否使用 `$ref` 引用 | `useDefinitions: "true"` |
-| `wrapCodeMsg` | 是否包装 code/msg 响应 | `wrapCodeMsg: "true"` |
-| `bizCodeEnumDescription` | 业务码枚举描述字段名 | `bizCodeEnumDescription: "business code"` |
-| `externalDocsDescription` | 外部文档描述 | `externalDocsDescription: "详细文档"` |
-| `externalDocsURL` | 外部文档 URL | `externalDocsURL: "https://..."` |
+| `title` | Document title | `title: "User Service"` |
+| `description` | Document description | `description: "User-related APIs"` |
+| `version` | API version | `version: "1.0"` |
+| `termsOfService` | Terms of service URL | `termsOfService: "https://..."` |
+| `contactName` | Contact name | `contactName: "John Doe"` |
+| `contactURL` | Contact URL | `contactURL: "https://..."` |
+| `contactEmail` | Contact email | `contactEmail: "a@b.com"` |
+| `licenseName` | License name | `licenseName: "MIT"` |
+| `licenseURL` | License URL | `licenseURL: "https://..."` |
+| `host` | API host address | `host: "api.example.com"` |
+| `basePath` | API base path | `basePath: "/v1"` |
+| `schemes` | Protocols (comma-separated) | `schemes: "https,http"` |
+| `produces` | Response Content-Type | `produces: "application/json"` |
+| `consumes` | Request Content-Type | `consumes: "application/json"` |
+| `useDefinitions` | Whether to use `$ref` references | `useDefinitions: "true"` |
+| `wrapCodeMsg` | Whether to wrap responses with code/msg | `wrapCodeMsg: "true"` |
+| `bizCodeEnumDescription` | Business code enum description field name | `bizCodeEnumDescription: "business code"` |
+| `externalDocsDescription` | External docs description | `externalDocsDescription: "Full docs"` |
+| `externalDocsURL` | External docs URL | `externalDocsURL: "https://..."` |
 
-### @server 支持的注解
+### Supported `@server` Annotations
 
-在 `.api` 文件的 `@server()` 块中，以下属性会影响 Swagger 生成：
+The following properties in the `@server()` block of a `.api` file affect Swagger generation:
 
-| 属性 | 说明 |
+| Property | Description |
 |---|---|
-| `tags` | 分组标签，对应 Swagger tags |
-| `summary` | 接口摘要 |
-| `prefix` | 路由前缀，拼接到路径前 |
-| `group` | 代码分组目录 |
-| `deprecated` | 标记接口已废弃 |
-| `operationId` | 自定义 operationId |
-| `authType` | 认证类型 |
+| `tags` | Grouping tags, mapped to Swagger tags |
+| `summary` | API summary |
+| `prefix` | Route prefix, prepended to the path |
+| `group` | Code grouping directory |
+| `deprecated` | Marks the API as deprecated |
+| `operationId` | Custom operationId |
+| `authType` | Authentication type |
 
 ## api cron
 
-从 `.cron` 文件生成基于 [czt-contrib/cron](https://github.com/lerity-yao/czt-contrib/tree/main/cron) 分布式定时任务框架的定时任务服务。支持内部定时任务（`@cron`）和外部触发任务两种模式。
+Generate a cron job service based on the [czt-contrib/cron](https://github.com/lerity-yao/czt-contrib/tree/main/cron) distributed cron framework from a `.cron` file. Supports both internal scheduled tasks (`@cron`) and externally triggered tasks.
 
 ```bash
 cztctl api cron -api task.cron -dir ./output
 ```
 
-| 参数 | 说明 |
+| Flag | Description |
 |---|---|
-| `-api` | .cron 文件路径 |
-| `-dir` | 输出目录 |
-| `--style` | 文件命名风格，默认 `gozero` |
-| `--remote` | 远程模板 Git 仓库地址 |
-| `--branch` | 远程模板分支 |
-| `--home` | 本地模板目录 |
+| `-api` | Path to the .cron file |
+| `-dir` | Output directory |
+| `--style` | File naming style, default `gozero` |
+| `--remote` | Remote template Git repository URL |
+| `--branch` | Remote template branch |
+| `--home` | Local template directory |
 
-### 生成的目录结构
+### Generated Directory Structure
 
 ```
 output/
 ├── etc/
-│   └── usercron.yaml         配置文件
+│   └── usercron.yaml         Configuration file
 ├── internal/
 │   ├── config/
-│   │   └── config.go         配置结构体
-│   ├── handler/              handler 层（任务注册）
-│   │   └── user/             按 group 分目录
-│   ├── logic/                logic 层（业务代码写这里）
+│   │   └── config.go         Configuration struct
+│   ├── handler/              Handler layer (task registration)
+│   │   └── user/             Subdirectory by group
+│   ├── logic/                Logic layer (write business code here)
 │   │   └── user/
 │   ├── svc/
-│   │   └── servicecontext.go 服务上下文
+│   │   └── servicecontext.go Service context
 │   ├── types/
-│   │   └── types.go          请求/响应类型
+│   │   └── types.go          Request/response types
 │   └── worker/
-│       └── worker.go         任务注册（cron 调度 + asynq handler 绑定）
-└── usercron.go               主入口
+│       └── worker.go         Task registration (cron scheduling + asynq handler binding)
+└── usercron.go               Main entry point
 ```
 
-rabbitmq 生成结构与 cron 基本一致，区别在于 worker 层处理的是 MQ 消费而非 cron 调度。
+The rabbitmq generated structure is essentially the same as cron, except the worker layer handles MQ consumption instead of cron scheduling.
 
-### .cron 文件语法
+### .cron File Syntax
 
-`.cron` 文件采用类 go-zero api 的 DSL 语法，由以下顶层声明组成：
+The `.cron` file uses a DSL syntax similar to the go-zero api format, composed of the following top-level declarations:
 
-#### syntax（必填）
+#### syntax (required)
 
-声明语法版本，当前固定为 `"v1"`。
+Declares the syntax version, currently fixed as `"v1"`.
 
 ```
 syntax = "v1"
 ```
 
-#### info（可选）
+#### info (optional)
 
-描述服务的元信息，支持任意 key-value 对：
+Describes service metadata, supports arbitrary key-value pairs:
 
 ```
 info (
-    title: "用户定时任务服务"
-    desc: "处理用户相关的定时与异步任务"
+    title: "User Cron Service"
+    desc: "Handles user-related scheduled and async tasks"
     version: "1.0"
-    author: "张三"
-    email: "zhangsan@example.com"
+    author: "John Doe"
+    email: "johndoe@example.com"
 )
 ```
 
-#### import（可选）
+#### import (optional)
 
-导入其他 `.cron` 文件中的类型定义，支持单行和分组两种写法：
+Imports type definitions from other `.cron` files. Supports both single-line and grouped forms:
 
 ```
 import "common.cron"
@@ -164,9 +166,9 @@ import (
 )
 ```
 
-#### type（可选）
+#### type (optional)
 
-定义请求参数结构体，语法与 go-zero api 的 type 完全一致，支持基本类型、切片、map、指针、嵌套结构体、struct tag：
+Defines request parameter structs. The syntax is identical to go-zero api's type declarations and supports primitive types, slices, maps, pointers, nested structs, and struct tags:
 
 ```
 type CleanReq {
@@ -188,64 +190,64 @@ type (
 )
 ```
 
-#### @server（可选）
+#### @server (optional)
 
-为 service 块设置元数据，支持以下字段：
+Sets metadata for the service block. Supported fields:
 
-| 字段 | 说明 | 示例 |
+| Field | Description | Example |
 |---|---|---|
-| `tags` | Swagger 分组标签 | `tags: "用户管理"` |
-| `summary` | 服务摘要 | `summary: "用户定时任务"` |
-| `description` | 服务描述 | `description: "详细说明"` |
-| `group` | 代码分组目录 | `group: user` |
-| `middleware` | 中间件（逗号分隔多个） | `middleware: Auth,Log` |
+| `tags` | Swagger grouping tags | `tags: "User Management"` |
+| `summary` | Service summary | `summary: "User cron tasks"` |
+| `description` | Service description | `description: "Detailed description"` |
+| `group` | Code grouping directory | `group: user` |
+| `middleware` | Middleware (comma-separated) | `middleware: Auth,Log` |
 
 ```
 @server (
-    tags: "用户管理"
-    summary: "用户相关定时任务"
+    tags: "User Management"
+    summary: "User-related cron tasks"
     group: user
     middleware: LogMiddleware
 )
 ```
 
-#### service（必填）
+#### service (required)
 
-定义服务和任务列表。每个任务项由以下注解组成：
+Defines the service and task list. Each task entry is composed of the following annotations:
 
-| 注解 | 必填 | 说明 |
+| Annotation | Required | Description |
 |---|---|---|
-| `@doc` | 否 | 任务文档，支持字符串和 KV 两种写法 |
-| `@cron` | 否 | cron 表达式，有则为内部定时任务，无则为外部触发任务 |
-| `@cronRetry` | 否 | 失败重试次数，整数 |
-| `@handler` | **是** | 任务名称，即 asynq task type |
-| 路由行 | **是** | 任务标识，可选带请求参数 `TaskName(ReqType)` |
+| `@doc` | No | Task documentation, supports both string and KV forms |
+| `@cron` | No | Cron expression; if present, the task is an internal scheduled task; otherwise it is externally triggered |
+| `@cronRetry` | No | Number of retry attempts on failure, integer |
+| `@handler` | **Yes** | Task name, i.e., the asynq task type |
+| Route line | **Yes** | Task identifier, optionally with a request parameter `TaskName(ReqType)` |
 
-**路由名规则：**
+**Route name rules:**
 
-路由名由标识符（字母、数字、下划线、`$`）组成，支持 `-`（横杠）和 `:`（冒号）作为分隔符：
-
-```
-CleanUserTask           // 纯标识符
-sync-order              // 横杠分隔
-email:send              // 冒号分隔
-data-sync:daily         // 混合分隔
-```
-
-**@doc 两种写法：**
+Route names are composed of identifiers (letters, digits, underscores, `$`) and support `-` (hyphen) and `:` (colon) as separators:
 
 ```
-// 字符串写法
-@doc "简单的文档注释"
+CleanUserTask           // plain identifier
+sync-order              // hyphen-separated
+email:send              // colon-separated
+data-sync:daily         // mixed separators
+```
 
-// KV 写法
+**Two forms of `@doc`:**
+
+```
+// String form
+@doc "Simple documentation comment"
+
+// KV form
 @doc(
-    summary: "数据归档任务"
-    description: "每天凌晨归档历史数据"
+    summary: "Data archival task"
+    description: "Archive historical data at midnight every day"
 )
 ```
 
-**完整示例：**
+**Full example:**
 
 ```
 syntax = "v1"
@@ -289,54 +291,54 @@ service userCron {
 }
 ```
 
-**任务类型区分：**
+**Task type distinction:**
 
-- 有 `@cron` → 内部定时任务，框架按 cron 表达式自动调度
-- 无 `@cron` → 外部触发任务，通过 `asynq.Client.Enqueue` 手动触发（支持延时执行、立即执行）
+- With `@cron` → Internal scheduled task, automatically dispatched by the framework according to the cron expression
+- Without `@cron` → Externally triggered task, triggered manually via `asynq.Client.Enqueue` (supports delayed or immediate execution)
 
 ## api rabbitmq
 
-从 `.rabbitmq` 文件生成基于 [czt-contrib/mq/rabbitmq](https://github.com/lerity-yao/czt-contrib/tree/main/mq/rabbitmq) 分布式 RabbitMQ 消费者服务框架的 RabbitMQ 消费者服务。
+Generate a RabbitMQ consumer service based on the [czt-contrib/mq/rabbitmq](https://github.com/lerity-yao/czt-contrib/tree/main/mq/rabbitmq) distributed RabbitMQ consumer framework from a `.rabbitmq` file.
 
 ```bash
 cztctl api rabbitmq -api order.rabbitmq -dir ./output
 ```
 
-| 参数 | 说明 |
+| Flag | Description |
 |---|---|
-| `-api` | .rabbitmq 文件路径 |
-| `-dir` | 输出目录 |
-| `--style` | 文件命名风格，默认 `gozero` |
-| `--remote` | 远程模板 Git 仓库地址 |
-| `--branch` | 远程模板分支 |
-| `--home` | 本地模板目录 |
+| `-api` | Path to the .rabbitmq file |
+| `-dir` | Output directory |
+| `--style` | File naming style, default `gozero` |
+| `--remote` | Remote template Git repository URL |
+| `--branch` | Remote template branch |
+| `--home` | Local template directory |
 
-### .rabbitmq 文件语法
+### .rabbitmq File Syntax
 
-`.rabbitmq` 文件与 `.cron` 文件共享相同的基础语法（syntax / info / import / type / @server），区别在于 service 块内的任务定义。
+The `.rabbitmq` file shares the same base syntax as `.cron` (syntax / info / import / type / @server). The difference lies in the task definitions within the service block.
 
-#### service（必填）
+#### service (required)
 
-每个任务项由以下注解组成：
+Each task entry is composed of the following annotations:
 
-| 注解 | 必填 | 说明 |
+| Annotation | Required | Description |
 |---|---|---|
-| `@doc` | 否 | 消费者文档，支持字符串和 KV 两种写法 |
-| `@handler` | **是** | 消费者处理器名称 |
-| 路由行 | **是** | 队列名称（点分隔标识符），可选带消息参数 |
+| `@doc` | No | Consumer documentation, supports both string and KV forms |
+| `@handler` | **Yes** | Consumer handler name |
+| Route line | **Yes** | Queue name (dot-separated identifier), optionally with a message parameter |
 
-**队列名称规则：**
+**Queue name rules:**
 
-路由名由标识符（字母、数字、下划线、`$`）组成，支持 `.`（点号）和 `-`（横杠）作为分隔符，对应 RabbitMQ 的队列名称：
+Route names are composed of identifiers (letters, digits, underscores, `$`) and support `.` (dot) and `-` (hyphen) as separators, corresponding to RabbitMQ queue names:
 
 ```
-order.created           // 点号分隔
-payment.refund.success  // 多段点号
-payment-refund          // 横杠分隔
-order.pay-callback      // 混合分隔
+order.created           // dot-separated
+payment.refund.success  // multi-segment dot
+payment-refund          // hyphen-separated
+order.pay-callback      // mixed separators
 ```
 
-**完整示例：**
+**Full example:**
 
 ```
 syntax = "v1"
@@ -381,23 +383,23 @@ service order-mq {
 }
 ```
 
-### .cron 与 .rabbitmq 语法对比
+### .cron vs .rabbitmq Syntax Comparison
 
-| 特性 | .cron | .rabbitmq |
+| Feature | .cron | .rabbitmq |
 |---|---|---|
-| syntax / info / import / type | 完全相同 | 完全相同 |
-| @server | 完全相同 | 完全相同 |
-| @doc | 完全相同 | 完全相同 |
-| @cron | 支持 | 不支持 |
-| @cronRetry | 支持 | 不支持 |
-| @handler | task type 名称 | 消费者名称 |
-| 路由行格式 | `TaskName[(ReqType)]` | `queue.name[(MsgType)]` |
-| 路由名分隔符 | `-`（横杠）、`:`（冒号） | `.`（点号）、`-`（横杠） |
-| 路由行命名 | 标识符，支持横杠/冒号分隔 | 标识符，支持点号/横杠分隔 |
+| syntax / info / import / type | Identical | Identical |
+| @server | Identical | Identical |
+| @doc | Identical | Identical |
+| @cron | Supported | Not supported |
+| @cronRetry | Supported | Not supported |
+| @handler | task type name | consumer name |
+| Route line format | `TaskName[(ReqType)]` | `queue.name[(MsgType)]` |
+| Route name separators | `-` (hyphen), `:` (colon) | `.` (dot), `-` (hyphen) |
+| Route naming | Identifier with hyphen/colon | Identifier with dot/hyphen |
 
-## 远程模板
+## Remote Templates
 
-cron 和 rabbitmq 命令支持通过 `--remote` 和 `--branch` 拉取远程 Git 仓库中的自定义模板，覆盖内置模板：
+The `cron` and `rabbitmq` commands support pulling custom templates from a remote Git repository via `--remote` and `--branch`, overriding the built-in templates:
 
 ```bash
 cztctl api cron \
@@ -407,66 +409,66 @@ cztctl api cron \
   --branch dev
 ```
 
-模板文件会被 clone 到 `~/.cztctl/.git/` 目录下，后续模板加载优先使用远程模板。
+Template files are cloned into `~/.cztctl/.git/`. Subsequent template loading will prefer remote templates.
 
-## 文件命名风格
+## File Naming Styles
 
-通过 `--style` 控制生成文件的命名风格：
+Control the naming style of generated files via `--style`:
 
-| 风格 | 示例 |
+| Style | Example |
 |---|---|
-| `gozero`（默认） | `servicecontext.go` |
+| `gozero` (default) | `servicecontext.go` |
 | `go_zero` | `service_context.go` |
 | `goZero` | `serviceContext.go` |
 
 ## rpc sdk
 
-将 RPC 服务的客户端代码自动生成为独立的 Go 模块，一键推送到指定 Git 仓库。调用方通过 `go get` 引入即可调用，无需关心 proto 定义和代码生成。
+Automatically generate RPC service client code as a standalone Go module and push it to a specified Git repository. Consumers can import it via `go get` without worrying about proto definitions or code generation.
 
 ```bash
 cztctl rpc sdk --proto proto/order.proto --repo https://gitlab.ddtz.com/rpc-sdk/order-sdk.git
 ```
 
-| 参数 | 短名 | 必填 | 默认值 | 说明 |
+| Flag | Short | Required | Default | Description |
 |---|---|---|---|---|
-| `--proto` | - | 是 | - | proto 文件路径（相对或绝对路径均可） |
-| `--repo` | - | 是 | - | SDK 仓库完整 git URL（http:// 或 https://） |
-| `--repo-user` | - | 否 | `cztctl-bot` | 仓库认证用户名 |
-| `--repo-token` | - | 否 | 内置默认值 | 仓库认证凭据（GitLab Access Token） |
-| `--remote` | - | 否 | 空 | goctl 远程模板 git URL |
-| `--style` | - | 否 | `gozero` | 命名风格 |
-| `--tag` | - | 否 | 自动递增 | 版本号（SemVer 格式，如 v1.0.0） |
-| `--branch` | - | 否 | 空 | goctl 远程模板分支 |
-| `-m` | `--multiple` | 否 | `false` | 多服务模式， rpc 服务如果是多模式，需要传入此值 |
-| `--repo-branch` | - | 否 | `main` | SDK 仓库 Git 分支名 |
-| `--goproxy` | - | 否 | 系统默认 | Go module 代理地址，工具会执行 go mod tidy，如果网络有问题，可以传入代理 |
+| `--proto` | - | Yes | - | Path to the proto file (relative or absolute) |
+| `--repo` | - | Yes | - | Full git URL of the SDK repository (http:// or https://) |
+| `--repo-user` | - | No | `cztctl-bot` | Repository authentication username |
+| `--repo-token` | - | No | Built-in default | Repository authentication credential (GitLab Access Token) |
+| `--remote` | - | No | empty | goctl remote template git URL |
+| `--style` | - | No | `gozero` | Naming style |
+| `--tag` | - | No | Auto-incremented | Version number (SemVer format, e.g. v1.0.0) |
+| `--branch` | - | No | empty | goctl remote template branch |
+| `-m` | `--multiple` | No | `false` | Multi-service mode; required if the rpc service uses multiple mode |
+| `--repo-branch` | - | No | `main` | SDK repository Git branch name |
+| `--goproxy` | - | No | System default | Go module proxy address; the tool runs `go mod tidy`, pass a proxy if there are network issues |
 
-### 工作流程
+### Workflow
 
-1. 克隆已有 SDK 仓库（新仓库则初始化）
-2. 清理旧客户端代码
-3. 初始化 go.mod（若不存在）
-4. 递归复制 proto 文件（包含依赖 proto）
-5. 自动生成 `.kong.proto`（Kong gRPC-gateway HTTP 注解变体）
-6. 调用 goctl 生成客户端代码
-7. 清理服务端代码（仅保留 client/ 目录）
-8. `go mod tidy` 整理依赖
-9. Git 提交、打标签、推送到远程仓库
+1. Clone the existing SDK repository (or initialize a new one)
+2. Clean up old client code
+3. Initialize go.mod (if it does not exist)
+4. Recursively copy proto files (including dependency protos)
+5. Auto-generate `.kong.proto` (Kong gRPC-gateway HTTP annotation variant)
+6. Call goctl to generate client code
+7. Clean up server-side code (keep only the `client/` directory)
+8. Run `go mod tidy` to tidy dependencies
+9. Git commit, tag, and push to the remote repository
 
-### Kong gRPC-gateway Proto 自动生成
+### Automatic Kong gRPC-gateway Proto Generation
 
-执行 `cztctl rpc sdk` 时，会自动在 `_sdk/` 目录中生成与 proto 同名的 `.kong.proto` 文件，用于 Kong 网关的 gRPC-gateway 路由配置。
+When `cztctl rpc sdk` is executed, a `.kong.proto` file with the same name as the proto is automatically generated in the `_sdk/` directory, used for Kong gateway gRPC-gateway routing configuration.
 
-**生成规则：**
+**Generation rules:**
 
-- 自动添加 `import "google/api/annotations.proto"`
-- 为每个 rpc 方法生成 `option (google.api.http)` 注解
-- HTTP 路径：`/{ServiceName}/{RpcMethodName}`
-- HTTP 方法统一为 `POST`，附带 `body: "*"`
+- Automatically adds `import "google/api/annotations.proto"`
+- Generates `option (google.api.http)` annotations for each rpc method
+- HTTP path: `/{ServiceName}/{RpcMethodName}`
+- HTTP method is uniformly `POST` with `body: "*"`
 
-**示例：**
+**Example:**
 
-原始 `vehicle.proto`：
+Original `vehicle.proto`:
 
 ```proto
 service SfVehicle {
@@ -474,7 +476,7 @@ service SfVehicle {
 }
 ```
 
-生成的 `vehicle.kong.proto`：
+Generated `vehicle.kong.proto`:
 
 ```proto
 import "google/api/annotations.proto";
@@ -486,16 +488,16 @@ service SfVehicle {
 }
 ```
 
-### 版本号规则
+### Version Number Rules
 
-- 首次发布默认：`v1.0.0`
-- 后续自动递增 patch：`v1.0.0` → `v1.0.1` → `v1.0.2` → ...
-- patch 到 99 后自动进位 minor：`v1.0.99` → `v1.1.0`
-- 可通过 `--tag` 手动指定（必须大于当前最新版本）
+- First release default: `v1.0.0`
+- Subsequent patch auto-increment: `v1.0.0` → `v1.0.1` → `v1.0.2` → ...
+- Auto-carry minor when patch reaches 99: `v1.0.99` → `v1.1.0`
+- Can be manually specified via `--tag` (must be greater than the current latest version)
 
-### 使用示例
+### Usage Examples
 
-**最简用法：**
+**Minimal usage:**
 
 ```bash
 cztctl rpc sdk \
@@ -503,7 +505,7 @@ cztctl rpc sdk \
   --repo https://gitlab.ddtz.com/rpc-sdk/tax-invoice-sdk.git
 ```
 
-**完整示例：**
+**Full example:**
 
 ```bash
 cztctl rpc sdk \
@@ -516,13 +518,13 @@ cztctl rpc sdk \
   --goproxy https://goproxy.cn,direct
 ```
 
-### SDK 调用方使用
+### SDK Consumer Usage
 
 ```bash
-# 拉取 SDK
+# Pull the SDK
 go get gitlab.ddtz.com/rpc-sdk/order-sdk@latest
 
-# 或指定版本
+# Or specify a version
 go get gitlab.ddtz.com/rpc-sdk/order-sdk@v1.0.2
 ```
 
@@ -535,15 +537,15 @@ resp, err := client.GetOrder(ctx, &order.GetOrderRequest{Id: 123})
 
 ## env
 
-查看或编辑 cztctl 环境变量。环境配置持久化在 `~/.cztctl/env` 文件中。
+View or edit cztctl environment variables. Environment configuration is persisted in `~/.cztctl/env`.
 
-### 查看环境变量
+### View Environment Variables
 
 ```bash
 cztctl env
 ```
 
-输出示例：
+Sample output:
 
 ```
 CZTCTL_OS=linux
@@ -554,52 +556,52 @@ CZTCTL_EXPERIMENTAL=off
 CZTCTL_VERSION=1.10.2
 ```
 
-### 编辑环境变量
+### Edit Environment Variables
 
 ```bash
 cztctl env -w KEY=VALUE
 ```
 
-支持同时设置多个值：
+Multiple values can be set at the same time:
 
 ```bash
 cztctl env -w CZTCTL_EXPERIMENTAL=on -w CZTCTL_HOME=/custom/path
 ```
 
-### 支持的变量
+### Supported Variables
 
-| 变量 | 说明 | 默认值 |
+| Variable | Description | Default |
 |---|---|---|
-| `CZTCTL_OS` | 操作系统（只读） | `runtime.GOOS` |
-| `CZTCTL_ARCH` | 系统架构（只读） | `runtime.GOARCH` |
-| `CZTCTL_HOME` | cztctl 主目录 | `~/.cztctl` |
-| `CZTCTL_CACHE` | 缓存目录 | `~/.cztctl/cache` |
-| `CZTCTL_VERSION` | 当前版本（只读） | 构建版本号 |
-| `CZTCTL_EXPERIMENTAL` | 实验性功能开关 | `off` |
+| `CZTCTL_OS` | Operating system (read-only) | `runtime.GOOS` |
+| `CZTCTL_ARCH` | System architecture (read-only) | `runtime.GOARCH` |
+| `CZTCTL_HOME` | cztctl home directory | `~/.cztctl` |
+| `CZTCTL_CACHE` | Cache directory | `~/.cztctl/cache` |
+| `CZTCTL_VERSION` | Current version (read-only) | Build version number |
+| `CZTCTL_EXPERIMENTAL` | Experimental features toggle | `off` |
 
 ### CZTCTL_EXPERIMENTAL
 
-控制 DSL 解析器选择：
+Controls DSL parser selection:
 
-- `off`（默认）：使用 ANTLR4 解析器
-- `on`：使用手写递归下降解析器
+- `off` (default): Use the ANTLR4 parser
+- `on`: Use the handwritten recursive-descent parser
 
 ```bash
-# 切换到手写解析器
+# Switch to the handwritten parser
 cztctl env -w CZTCTL_EXPERIMENTAL=on
 
-# 切换回 ANTLR4 解析器
+# Switch back to the ANTLR4 parser
 cztctl env -w CZTCTL_EXPERIMENTAL=off
 ```
 
-## 版本规则
+## Versioning
 
-版本号格式：`v<go-zero主版本>.<微版本>`
+Version format: `v<go-zero-major-version>.<micro-version>`
 
-- 前两段（如 `1.10`）对应所依赖的 go-zero 版本
-- 末段为 cztctl 自身递增版本号
-- `--version` 输出自动关联 go.mod 中的 go-zero 版本
+- The first two segments (e.g. `1.10`) correspond to the go-zero version being depended upon
+- The last segment is the cztctl self-incrementing version number
+- `--version` output is automatically associated with the go-zero version in go.mod
 
 ## License
 
-同 go-zero，MIT License。
+Same as go-zero, MIT License.

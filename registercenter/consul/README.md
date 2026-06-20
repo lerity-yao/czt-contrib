@@ -1,42 +1,44 @@
-# Consul注册中心使用文档
+# Consul Service Registry Documentation
+
+[中文](./readme-cn.md)
 
 [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=registercenter-consul)](https://codecov.io/gh/lerity-yao/czt-contrib)
 
-## 1. 项目介绍
+## 1. Overview
 
-本模块提供了基于Consul的服务注册与发现功能，支持自动注册、健康检查、监控和服务发现，适用于微服务架构中服务治理场景。
+This module provides Consul-based service registration and discovery, supporting automatic registration, health checks, monitoring, and service discovery. It is suitable for service governance in microservice architectures.
 
-主要功能包括：
-- 服务自动注册与注销
-- 多种健康检查机制（TTL、HTTP、GRPC）
-- 服务健康状态监控与自动恢复
-- 基于gRPC的服务发现解析器
-- 优雅关闭与资源清理
-- 容器环境（如Kubernetes）适配
+Key features:
+- Automatic service registration and deregistration
+- Multiple health check mechanisms (TTL, HTTP, GRPC)
+- Service health monitoring and automatic recovery
+- gRPC-based service discovery resolver
+- Graceful shutdown and resource cleanup
+- Container environment (e.g., Kubernetes) adaptation
 
-## 2. 项目结构
+## 2. Project Structure
 ```
 registercnter/consul/ 
-├── README.md # 使用文档 
-├── builder.go # 服务构建器 
-├── config.go # 配置结构定义 
-├── consul_test.go # 单元测试
-├── go.mod # Go模块文件 
-├── go.sum # 依赖校验文件 
-├── register.go # 核心注册实现 
-├── resovler.go # gRPC服务发现解析器 
-└── target.go # 目标服务定义
+├── README.md # Documentation 
+├── builder.go # Service builder 
+├── config.go # Configuration struct definitions 
+├── consul_test.go # Unit tests
+├── go.mod # Go module file 
+├── go.sum # Dependency checksum file 
+├── register.go # Core registration implementation 
+├── resovler.go # gRPC service discovery resolver 
+└── target.go # Target service definition
 ```
 
-## 3. 安装
+## 3. Installation
 
 ```bash
 go get -u github.com/lerity-yao/czt-contrib/registercenter/consul
 ```
 
-## 4. 服务注册
+## 4. Service Registration
 
-### 4.1 基本用法
+### 4.1 Basic Usage
 
 ```go
 import (
@@ -44,85 +46,87 @@ import (
 )
 
 func main() {
-	// 配置Consul客户端
+	// Configure the Consul client
 	conf := consul.Conf{
-		Host:      "127.0.0.1:8500",     // Consul服务器地址
-		Key:       "user-service",        // 服务名称
-		CheckType: consul.CheckTypeTTL,   // 健康检查类型
-		TTL:       20,                    // TTL健康检查间隔（秒）
-		Tag:       []string{"v1", "grpc"}, // 服务标签
+		Host:      "127.0.0.1:8500",     // Consul server address
+		Key:       "user-service",        // Service name
+		CheckType: consul.CheckTypeTTL,   // Health check type
+		TTL:       20,                    // TTL health check interval (seconds)
+		Tag:       []string{"v1", "grpc"}, // Service tags
 	}
 
-	// 创建服务实例
+	// Create service instance
 	service := consul.MustNewService(":8080", conf)
 
-	// 注册服务
+	// Register the service
 	if err := service.RegisterService(); err != nil {
 		panic(err)
 	}
 	
-	// 注意：在非go-zero环境下，需要手动注销服务
-	// defer service.DeregisterService() // 优雅注销
+	// Note: In non-go-zero environments, you need to deregister the service manually
+	// defer service.DeregisterService() // graceful deregistration
 	
-	// 在go-zero环境下，不需要手动注销服务，go-zero会通过proc包自动处理服务注销
+	// In go-zero environments, manual deregistration is not needed;
+	// go-zero handles it automatically via the proc package
 	
-	// 启动您的服务...
+	// Start your service...
 }
 ```
 
-### 4.2 配置选项
+### 4.2 Configuration Options
 
-`consul.Conf` 结构体包含以下配置项：
+The `consul.Conf` struct contains the following fields:
 
-| 字段名          | 类型                | 描述                                                    | 默认值                   |
-|--------------|-------------------|-------------------------------------------------------|-----------------------|
-| Host         | string            | Consul服务器地址                                           | 无（必需）                 |
-| Key          | string            | 服务名称                                                  | 无（必需）                 |
-| Scheme       | string            | 连接协议(http/https)                                      | "http"                |
-| Token        | string            | Consul访问令牌                                            | ""                    |
-| CheckType    | string            | 健康检查类型                                                | "ttl"，可选ttl，http，grpc |
-| TTL          | int               | 健康检查间隔(秒)，TTL/HTTP/GRPC                               | 20                    |
-| CheckTimeout | int               | 当consul需要访问服务的健康检查接口时，即checktype不是 ttl的时候，健康检查超时时间(秒) | 3                     |
-| ExpiredTTL   | int               | 服务过期时间系数，基础时间为TTL，过期时间为TTL*ExpiredTTL                 | 3                     |
-| Tag          | []string          | 服务标签                                                  | []                    |
-| Meta         | map[string]string | 服务元数据                                                 | nil                   |
-| CheckHttp    | CheckHttpConf     | HTTP健康检查配置，CheckType为http的时候，此配置生效                    | -                     |
-| CheckGrpc    | CheckGrpcConf     | GRPC健康检查配置，CheckType为grpc的时候，此配置生效                    | -                     |
-### 4.3 HTTP健康检查配置
+| Field        | Type              | Description                                                                                          | Default                        |
+|--------------|-------------------|------------------------------------------------------------------------------------------------------|--------------------------------|
+| Host         | string            | Consul server address                                                                                | required                       |
+| Key          | string            | Service name                                                                                         | required                       |
+| Scheme       | string            | Connection protocol (http/https)                                                                     | "http"                         |
+| Token        | string            | Consul access token                                                                                  | ""                             |
+| CheckType    | string            | Health check type                                                                                    | "ttl"; options: ttl, http, grpc |
+| TTL          | int               | Health check interval (seconds) for TTL/HTTP/GRPC                                                   | 20                             |
+| CheckTimeout | int               | Health check timeout (seconds) when consul accesses the service health endpoint (non-TTL check types) | 3                              |
+| ExpiredTTL   | int               | Service expiry multiplier; expiry time = TTL * ExpiredTTL                                            | 3                              |
+| Tag          | []string          | Service tags                                                                                         | []                             |
+| Meta         | map[string]string | Service metadata                                                                                     | nil                            |
+| CheckHttp    | CheckHttpConf     | HTTP health check config; effective when CheckType is http                                           | -                              |
+| CheckGrpc    | CheckGrpcConf     | GRPC health check config; effective when CheckType is grpc                                           | -                              |
+
+### 4.3 HTTP Health Check Configuration
 
 ```go
 type CheckHttpConf struct {
-	Method string // HTTP方法（GET或POST）
-	Path   string // 健康检查路径
-	Host   string // 健康检查主机
-	Port   int    // 健康检查端口
-	Scheme string // HTTP协议（http或https）
+	Method string // HTTP method (GET or POST)
+	Path   string // Health check path
+	Host   string // Health check host
+	Port   int    // Health check port
+	Scheme string // HTTP scheme (http or https)
 }
 ```
 
-### 4.4 GRPC健康检查配置
+### 4.4 GRPC Health Check Configuration
 
 ```go
 type CheckGrpcConf struct {
-	TLSServerName string // TLS服务器名称（可选）
-	TLSSkipVerify bool   // 是否跳过TLS验证，默认true
-	GRPCUseTLS    bool   // 是否使用TLS，默认false
+	TLSServerName string // TLS server name (optional)
+	TLSSkipVerify bool   // Whether to skip TLS verification, default true
+	GRPCUseTLS    bool   // Whether to use TLS, default false
 }
 ```
 
-### 4.5 健康检查类型
+### 4.5 Health Check Types
 
-支持三种健康检查类型：
+Three health check types are supported:
 
-1. **TTL检查** (`CheckTypeTTL`)
-    - 定期更新TTL以保持服务健康状态
-    - 适用于需要应用自定义健康逻辑的场景
+1. **TTL Check** (`CheckTypeTTL`)
+    - Periodically updates the TTL to maintain service health status
+    - Suitable for scenarios requiring custom health logic in the application
 
-2. **HTTP检查** (`CheckTypeHttp`)
-    - 适用于直接检查api服务健康状态
-    - `http` 检查为 `consul` 服务端向服务发起请求，机制为 `consul` 服务端定时发起
-    - 服务必须预留一个可以检测服务健康的接口， `go-zero` 开启健康检查之后， 默认会有一个 `host:6060/healthz` 的健康检查接口
-    - 详细配置示例：
+2. **HTTP Check** (`CheckTypeHttp`)
+    - Suitable for directly checking the health of API services
+    - The `http` check is initiated by the `consul` server-side toward the service on a scheduled basis
+    - The service must expose a health-check endpoint; after enabling health checks in `go-zero`, a `host:6060/healthz` endpoint is available by default
+    - Detailed configuration example:
     ```go
     conf := consul.Conf{
         CheckType: consul.CheckTypeHttp,
@@ -136,61 +140,61 @@ type CheckGrpcConf struct {
     }
     ```
 
-3. **GRPC检查** (`CheckTypeGrpc`)
-    - 适用于直接检查gRPC服务健康状态
-    - `grpc` 检查为 `consul` 服务端向服务发起请求，机制为 `consul` 服务端定时发起
-    - 服务必须预留一个可以检测服务健康的接口， `go-zero` 开启rpc服务之后， 默认会有一个 `grpc.health.v1.Health/Check` 的健康检查接口
-    - 详细配置示例：
+3. **GRPC Check** (`CheckTypeGrpc`)
+    - Suitable for directly checking the health of gRPC services
+    - The `grpc` check is initiated by the `consul` server-side toward the service on a scheduled basis
+    - The service must expose a health-check endpoint; after enabling an rpc service in `go-zero`, a `grpc.health.v1.Health/Check` endpoint is available by default
+    - Detailed configuration example:
     ```go
     conf := consul.Conf{
         CheckType: consul.CheckTypeGrpc,
-        TTL:       20,  // 健康检查间隔
-        CheckTimeout: 5, // 健康检查超时时间
+        TTL:       20,  // Health check interval
+        CheckTimeout: 5, // Health check timeout
         CheckGrpc: consul.CheckGrpcConf{
-            TLSServerName: "example.com", // 可选，用于TLS连接验证
-            TLSSkipVerify: true,          // 是否跳过TLS验证，默认true
-            GRPCUseTLS:    false,         // 是否使用TLS连接，默认false
+            TLSServerName: "example.com", // Optional, used for TLS connection verification
+            TLSSkipVerify: true,          // Whether to skip TLS verification, default true
+            GRPCUseTLS:    false,         // Whether to use TLS connection, default false
         },
     }
     ```
-    - 注意事项：使用GRPC检查时，您的gRPC服务需要实现标准的健康检查服务接口（`grpc.health.v1.Health`）
+    - Note: When using the GRPC check, your gRPC service must implement the standard health check service interface (`grpc.health.v1.Health`)
 
-## 5. 核心API
+## 5. Core API
 
-### 5.1 Client接口
+### 5.1 Client Interface
 
 ```go
 type Client interface {
-	RegisterService() error                  // 注册服务并启动监控
-	DeregisterService() error                // 注销服务
-	GetServiceID() string                    // 获取服务ID
-	GetRegistration() *api.AgentServiceRegistration // 获取服务注册信息
-	GetServiceClient() *api.Client           // 获取Consul客户端
+	RegisterService() error                  // Register service and start monitoring
+	DeregisterService() error                // Deregister service
+	GetServiceID() string                    // Get service ID
+	GetRegistration() *api.AgentServiceRegistration // Get service registration info
+	GetServiceClient() *api.Client           // Get Consul client
 }
 ```
 
-### 5.2 服务创建函数
+### 5.2 Service Constructor Functions
 
 ```go
-// 创建服务实例
+// Create a service instance
 func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error)
 
-// 创建服务实例，如果失败则panic
+// Create a service instance; panics on failure
 func MustNewService(listenOn string, c Conf, opts ...ServiceOption) Client
 ```
 
-## 6. 服务发现
+## 6. Service Discovery
 
-### 6.1 gRPC客户端使用
+### 6.1 gRPC Client Usage
 
 ```go
 import (
 	"google.golang.org/grpc"
-	_ "github.com/lerity-yao/czt-contrib/registercenter/consul" // 自动注册解析器
+	_ "github.com/lerity-yao/czt-contrib/registercenter/consul" // Auto-register resolver
 )
 
 func main() {
-	// 使用consul URL创建gRPC连接
+	// Create a gRPC connection using a consul URL
 	conn, err := grpc.Dial(
 		"consul://127.0.0.1:8500/user-service?healthy=true&tag=v1",
 		grpc.WithInsecure(),
@@ -201,30 +205,30 @@ func main() {
 	}
 	defer conn.Close()
 
-	// 创建gRPC客户端并使用
+	// Create and use a gRPC client
 	// ...
 }
 ```
 
-### 6.2 URL查询参数
+### 6.2 URL Query Parameters
 
-Consul服务发现URL支持以下查询参数：
+The Consul service discovery URL supports the following query parameters:
 
-| 参数名 | 类型 | 描述 | 默认值 |
-|-------|------|------|-------|
-| healthy | bool | 是否只查询健康服务 | false |
-| tag | string | 服务标签过滤 | "" |
-| wait | duration | Consul阻塞查询等待时间 | - |
-| timeout | duration | 查询超时时间 | - |
-| limit | int | 限制返回服务数量 | 0(无限制) |
-| dc | string | 数据中心 | - |
-| token | string | Consul访问令牌 | - |
+| Parameter | Type     | Description                          | Default    |
+|-----------|----------|--------------------------------------|------------|
+| healthy   | bool     | Whether to query only healthy services | false    |
+| tag       | string   | Service tag filter                   | ""         |
+| wait      | duration | Consul blocking query wait time      | -          |
+| timeout   | duration | Query timeout                        | -          |
+| limit     | int      | Limit the number of returned services | 0 (no limit) |
+| dc        | string   | Datacenter                           | -          |
+| token     | string   | Consul access token                  | -          |
 
-## 7. 高级用法
+## 7. Advanced Usage
 
-### 7.1 自定义监控函数
+### 7.1 Custom Monitor Functions
 
-您可以自定义监控函数来实现特殊的健康检查逻辑：
+You can define custom monitor functions to implement special health check logic:
 
 ```go
 import (
@@ -234,7 +238,7 @@ import (
 	"github.com/zeromicro/go-zero/core/logx"
 )
 
-// 自定义监控函数
+// Custom monitor function
 func customMonitorFunc() consul.MonitorFunc {
 	return func(cc *CommonClient, stopCh <-chan struct{}) {
 		// todo your logic
@@ -242,19 +246,19 @@ func customMonitorFunc() consul.MonitorFunc {
 }
 
 func main() {
-	// 使用自定义监控函数
+	// Use a custom monitor function
 	service, _ := consul.NewService(":8080", conf, 
 		consul.WithMonitorFuncs(customMonitorFunc()),
 	)
 	
-	// 注册服务
+	// Register the service
 	service.RegisterService()
 }
 ```
 
-### 7.2 多监控函数支持
+### 7.2 Multiple Monitor Functions
 
-您可以注册多个监控函数，每个函数负责不同的健康检查维度：
+You can register multiple monitor functions, each responsible for a different health check dimension:
 
 ```go
 import (
@@ -262,102 +266,102 @@ import (
 )
 
 func main() {
-	// 使用多个自定义监控函数
+	// Use multiple custom monitor functions
 	service, _ := consul.NewService(":8080", conf, 
 		consul.WithMonitorFuncs(
-			resourceMonitorFunc(),  // 监控系统资源
-			dbMonitorFunc(),        // 监控数据库连接
-			businessMonitorFunc(),  // 监控业务状态
+			resourceMonitorFunc(),  // Monitor system resources
+			dbMonitorFunc(),        // Monitor database connections
+			businessMonitorFunc(),  // Monitor business status
 		),
 	)
 	
-	// 注册服务
+	// Register the service
 	service.RegisterService()
 }
 ```
 
-## 8. 自动恢复机制
+## 8. Automatic Recovery
 
-当服务健康检查失败时，系统会自动尝试重新注册：
+When a service health check fails, the system automatically attempts to re-register:
 
-- 最大重试次数：5次
-- 初始退避时间：1秒
-- 最大退避时间：30秒
-- 采用指数退避策略
+- Maximum retry attempts: 5
+- Initial backoff time: 1 second
+- Maximum backoff time: 30 seconds
+- Uses exponential backoff strategy
 
-## 9. 容器环境适配
+## 9. Container Environment Adaptation
 
-模块会自动检测容器环境，优先使用以下方式获取服务地址：
+The module automatically detects container environments and prioritizes the following methods for obtaining the service address:
 
-1. 检查`POD_IP`环境变量（Kubernetes容器环境）
-2. 使用系统内部IP
-3. 回退到配置的监听地址
+1. Check the `POD_IP` environment variable (Kubernetes container environment)
+2. Use the system's internal IP
+3. Fall back to the configured listen address
 
-## 10. 优雅关闭
+## 10. Graceful Shutdown
 
-通过`proc.AddShutdownListener`机制，在程序退出时自动：
+Via the `proc.AddShutdownListener` mechanism, the following actions are performed automatically on program exit:
 
-1. 停止所有监控协程
-2. 注销服务
-3. 清理资源
+1. Stop all monitor goroutines
+2. Deregister the service
+3. Clean up resources
 
-## 11. 最佳实践
+## 11. Best Practices
 
-### 11.1 服务注册最佳实践
+### 11.1 Service Registration Best Practices
 
-1. **设置合理的TTL**
-    - TTL值建议设置为15-30秒
-    - 系统会自动以TTL-1秒的频率发送心跳
+1. **Set a reasonable TTL**
+    - Recommended TTL: 15–30 seconds
+    - The system automatically sends heartbeats at a frequency of TTL-1 seconds
 
-2. **优雅关闭**
-    - 在标准Go环境中，使用`defer service.DeregisterService()`确保服务注销
-    - 在go-zero环境中，不需要手动处理服务注销
+2. **Graceful shutdown**
+    - In standard Go environments, use `defer service.DeregisterService()` to ensure deregistration
+    - In go-zero environments, manual deregistration is not required
 
-3. **合理设置健康检查**
-    - HTTP检查适用于有Web接口的服务
-    - TTL检查适用于需要自定义健康逻辑的场景
-    - GRPC检查适用于gRPC服务，需要实现标准健康检查接口
+3. **Configure health checks appropriately**
+    - HTTP checks are suitable for services with web interfaces
+    - TTL checks are suitable for scenarios requiring custom health logic
+    - GRPC checks are suitable for gRPC services that implement the standard health check interface
 
-### 11.2 服务发现最佳实践
+### 11.2 Service Discovery Best Practices
 
-1. **启用负载均衡**
-    - 通过`WithDefaultServiceConfig`配置轮询策略
+1. **Enable load balancing**
+    - Configure the round-robin policy via `WithDefaultServiceConfig`
 
-2. **只查询健康服务**
-    - 在URL中添加`?healthy=true`参数
+2. **Query only healthy services**
+    - Add `?healthy=true` to the URL
 
-3. **使用标签过滤**
-    - 利用标签区分不同版本或环境的服务
+3. **Use tag filtering**
+    - Use tags to distinguish between different versions or environments of a service
 
-## 12. 故障排查
+## 12. Troubleshooting
 
-### 12.1 常见问题
+### 12.1 Common Issues
 
-1. **服务注册失败**
-    - 检查Consul服务器地址是否正确
-    - 验证Token权限是否足够
-    - 检查服务端口是否被占用
+1. **Service registration failure**
+    - Check that the Consul server address is correct
+    - Verify that the Token has sufficient permissions
+    - Check that the service port is not already in use
 
-2. **健康检查失败**
-    - TTL模式：检查网络连接是否稳定
-    - HTTP模式：验证健康检查端点是否正确配置并返回200状态
-    - GRPC模式：确保服务实现了标准的健康检查接口
+2. **Health check failure**
+    - TTL mode: Check that the network connection is stable
+    - HTTP mode: Verify that the health check endpoint is correctly configured and returns a 200 status
+    - GRPC mode: Ensure the service implements the standard health check interface
 
-3. **服务自动注销**
-    - 检查TTL设置是否合理
-    - 查看日志中的错误信息
-    - 验证系统时间是否同步
+3. **Service auto-deregistration**
+    - Check that the TTL setting is reasonable
+    - Review error messages in the logs
+    - Verify that the system clock is synchronized
 
-4. **服务发现问题**
-    - 检查Consul URL格式是否正确
-    - 验证服务是否已经正确注册到Consul
-    - 确认查询参数设置是否合适
+4. **Service discovery issues**
+    - Check that the Consul URL format is correct
+    - Verify that the service has been correctly registered with Consul
+    - Confirm that the query parameters are set appropriately
 
-### 12.2 日志排查
+### 12.2 Log Diagnostics
 
-模块使用`github.com/zeromicro/go-zero/core/logx`记录日志，可通过配置logx查看详细日志信息。
+The module uses `github.com/zeromicro/go-zero/core/logx` for logging. Configure logx to view detailed log information.
 
-## 13. 依赖项
+## 13. Dependencies
 
 - github.com/hashicorp/consul/api
 - github.com/zeromicro/go-zero/core/logx
@@ -365,10 +369,10 @@ func main() {
 - github.com/zeromicro/go-zero/core/proc
 - google.golang.org/grpc
 
-## 14. 许可证
+## 14. License
 
 [MIT License](LICENSE)
 
-## 15. 更新日志
+## 15. Changelog
 
-查看 [CHANGELOG.md](./CHANGELOG.md)
+See [CHANGELOG.md](./CHANGELOG.md)
