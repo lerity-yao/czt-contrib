@@ -1,0 +1,13 @@
+{
+  "name": "czt-contrib-docs",
+  "private": true,
+  "scripts": {
+    "docs:copy": "node scripts/copy-docs.mjs",
+    "dev": "npm run docs:copy && vitepress dev",
+    "build": "npm run docs:copy && vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.0"
+  }
+}
