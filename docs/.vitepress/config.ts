@@ -4,6 +4,7 @@ export default defineConfig({
   base: '/czt-contrib/',
   title: 'czt-contrib',
   description: 'Microservice Governance Components for go-zero',
+  ignoreDeadLinks: true,
 
   locales: {
     en: {
