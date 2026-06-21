@@ -1,3 +1,380 @@
+# consul
+
+English | [中文](./readme-cn.md)
+
+[![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=registercenter-consul)](https://codecov.io/gh/lerity-yao/czt-contrib)
+
+Service registration and discovery module based on [Consul](https://developer.hashicorp.com/consul) and [go-zero](https://github.com/zeromicro/go-zero), supporting automatic registration, health checks (TTL / HTTP / gRPC), automatic recovery, and a gRPC service discovery resolver.
+
+## Features
+
+- 📋 **Auto Registration & Deregistration** — Service is automatically registered on startup, and deregistered on process exit via `proc.AddShutdownListener`
+- 💓 **Multiple Health Checks** — Supports TTL, HTTP, and gRPC health check mechanisms
+- 🔄 **Automatic Recovery** — Automatically retries registration on health check failure with exponential backoff
+- 🔍 **gRPC Service Discovery** — Built-in `consul://` scheme resolver, auto-registered via `init()`, supporting blocking queries and tag filtering
+- 🐳 **Container Environment Adaptation** — Automatically detects `POD_IP` environment variable (Kubernetes), falls back to internal IP
+- 🔧 **Extensible Monitoring** — Inject custom monitor functions via `WithMonitorFuncs`
+
+## Installation
+
+```bash
+go get github.com/lerity-yao/czt-contrib/registercenter/consul@latest
+```
+
+## Configuration Parameters
+
+### Conf
+
+| Parameter | Type | Required | Default | Description |
+|--------|------|:----:|--------|------|
+| `Host` | string | Yes | - | Consul server address, format `host:port`, e.g. `127.0.0.1:8500` |
+| `Key` | string | Yes | - | Service name, e.g. `user-service` |
+| `Scheme` | string | No | `http` | Connection protocol, options: `http` / `https` |
+| `Token` | string | No | `""` | Consul ACL access token |
+| `Tag` | []string | No | `[]` | Service tag list |
+| `Meta` | map[string]string | No | `nil` | Service metadata |
+| `TTL` | int | No | `20` | Health check interval (seconds). In TTL mode, this is the heartbeat interval; in HTTP / gRPC mode, this is the interval for Consul server-initiated checks |
+| `ExpiredTTL` | int | No | `3` | Service deregistration multiplier. Actual deregistration time is `TTL * ExpiredTTL` seconds |
+| `CheckTimeout` | int | No | `3` | Health check timeout (seconds). Only effective for HTTP / gRPC mode (not used in TTL mode) |
+| `CheckType` | string | No | `ttl` | Health check type, options: `ttl` / `http` / `grpc` |
+| `CheckHttp` | [CheckHttpConf](#checkhttpconf) | No | - | HTTP health check configuration, effective when `CheckType` is `http` |
+| `CheckGrpc` | [CheckGrpcConf](#checkgrpcconf) | No | - | gRPC health check configuration, effective when `CheckType` is `grpc` |
+
+> `Conf.Validate()` is automatically called when invoking `NewService` to validate the above fields.
+
+### CheckHttpConf
+
+| Parameter | Type | Default | Description |
+|--------|------|--------|------|
+| `Method` | string | `GET` | HTTP method, options: `GET` / `POST` |
+| `Path` | string | `/healthz` | Health check path |
+| `Host` | string | `0.0.0.0` | Health check host address |
+| `Port` | int | `6060` | Health check port |
+| `Scheme` | string | `http` | HTTP protocol, options: `http` / `https` |
+
+### CheckGrpcConf
+
+| Parameter | Type | Default | Description |
+|--------|------|--------|------|
+| `TLSServerName` | string | `""` | TLS server name (optional), used for TLS connection verification |
+| `TLSSkipVerify` | bool | `true` | Whether to skip TLS verification |
+| `GRPCUseTLS` | bool | `false` | Whether to use TLS connection |
+
+## API Reference
+
+### Constructors
+
+| Function | Signature | Description |
+|------|------|------|
+| `MustNewService` | `func MustNewService(listenOn string, c Conf, opts ...ServiceOption) Client` | Create service instance, panics on validation failure |
+| `NewService` | `func NewService(listenOn string, c Conf, opts ...ServiceOption) (Client, error)` | Create service instance, returns error on validation failure |
+
+> `listenOn` is the service listen address, e.g. `:8080` or `0.0.0.0:8080`. The module automatically resolves it to the actual reachable IP:Port.
+
+### ServiceOption
+
+| Option | Parameter | Description |
+|--------|------|------|
+| `WithMonitorFuncs` | `funcs ...MonitorFunc` | Inject custom monitor functions. If not provided, the default monitor function is automatically selected based on `CheckType` |
+
+### Client Interface Methods
+
+| Method | Signature | Description |
+|------|------|------|
+| `RegisterService` | `RegisterService() error` | Register service and start health monitoring, auto-register graceful shutdown callback |
+| `DeregisterService` | `DeregisterService() error` | Deregister service and stop all monitor goroutines |
+| `GetServiceID` | `GetServiceID() string` | Get service ID, format is `Key-Host-Port` |
+| `GetRegistration` | `GetRegistration() *api.AgentServiceRegistration` | Get service registration info |
+| `GetServiceClient` | `GetServiceClient() *api.Client` | Get Consul API client instance |
+
+### Monitor Functions
+
+| Function | Signature | Description |
+|------|------|------|
+| `TTLCheckMonitorFunc` | `func TTLCheckMonitorFunc() MonitorFunc` | Default monitor function for TTL health checks, periodically calls `UpdateTTL` to update heartbeat |
+| `HttpCheckMonitorFunc` | `func HttpCheckMonitorFunc() MonitorFunc` | Default monitor function for HTTP / gRPC health checks, periodically queries service health status |
+| `TTLMonitorLogic` | `func TTLMonitorLogic(cc *CommonClient, state *MonitorState) error` | TTL monitor logic, includes automatic registration retry |
+| `HttpMonitorLogic` | `func HttpMonitorLogic(cc *CommonClient, state *MonitorState) error` | HTTP / gRPC monitor logic, includes automatic registration retry |
+
+> **Default monitor function selection rule**: When `CheckType` is `ttl`, `TTLCheckMonitorFunc()` is used; when `http` or `grpc`, `HttpCheckMonitorFunc()` is used.
+
+### Public Types
+
+| Type | Definition | Description |
+|------|------|------|
+| `MonitorFunc` | `func(cc *CommonClient, stopChan <-chan struct{})` | Monitor function signature, receives `CommonClient` and stop channel |
+| `ServiceOption` | `func(*CommonClient)` | Service option function signature |
+| `MonitorState` | `struct{...}` | Monitor state, includes retry count, backoff time, Ticker, etc., provides `Close()` method |
+
+### Constants
+
+| Constant | Value | Description |
+|------|------|------|
+| `CheckTypeTTL` | `"ttl"` | TTL health check type |
+| `CheckTypeHttp` | `"http"` | HTTP health check type |
+| `CheckTypeGrpc` | `"grpc"` | gRPC health check type |
+
+## Advanced Guide
+
+### Health Check Mechanism
+
+Three health check types are supported, determined by `Conf.CheckType`:
+
+#### TTL Check (`ttl`)
+
+- **Mechanism**: Service periodically sends `UpdateTTL` heartbeat to Consul to maintain healthy status
+- **Heartbeat frequency**: `TTL - 1` seconds (minimum 1 second)
+- **Use case**: Scenarios requiring custom application health logic
+- Consul will automatically deregister the service if no heartbeat is received within `TTL * ExpiredTTL` seconds
+
+#### HTTP Check (`http`)
+
+- **Mechanism**: Consul server periodically sends HTTP requests to the service's health check endpoint at `TTL` second intervals
+- **Timeout**: Controlled by `CheckTimeout`
+- **Use case**: Services with web interfaces
+- After enabling health checks in go-zero, `host:6060/healthz` endpoint is available by default
+
+```go
+conf := consul.Conf{
+    Host:      "127.0.0.1:8500",
+    Key:       "user-service",
+    CheckType: consul.CheckTypeHttp,
+    TTL:       20,
+    CheckTimeout: 3,
+    CheckHttp: consul.CheckHttpConf{
+        Method: "GET",
+        Path:   "/healthz",
+        Host:   "0.0.0.0",
+        Port:   6060,
+        Scheme: "http",
+    },
+}
+```
+
+#### gRPC Check (`grpc`)
+
+- **Mechanism**: Consul server periodically sends gRPC health check requests to the service at `TTL` second intervals
+- **Timeout**: Controlled by `CheckTimeout`
+- **Use case**: gRPC services
+- After enabling rpc service in go-zero, `grpc.health.v1.Health/Check` endpoint is available by default
+
+```go
+conf := consul.Conf{
+    Host:      "127.0.0.1:8500",
+    Key:       "user-service",
+    CheckType: consul.CheckTypeGrpc,
+    TTL:       20,
+    CheckTimeout: 5,
+    CheckGrpc: consul.CheckGrpcConf{
+        TLSServerName: "example.com", // optional
+        TLSSkipVerify: true,
+        GRPCUseTLS:    false,
+    },
+}
+```
+
+> When using gRPC check, the service must implement the standard health check interface (`grpc.health.v1.Health`).
+
+### Automatic Recovery Mechanism
+
+When a health check fails (TTL update failure or HTTP / gRPC health status is not `passing`), the monitor goroutine automatically attempts to re-register the service:
+
+| Parameter | Value | Description |
+|------|------|------|
+| Max retry attempts | 5 | Counter resets and continues retrying after exceeding |
+| Initial backoff time | 1 second | Wait time for first retry |
+| Max backoff time | 30 seconds | Backoff time upper limit |
+| Backoff strategy | Exponential backoff | `backoff * 2`, capped at upper limit |
+
+Retry flow:
+1. Health check failure
+2. Check if current service health status is `passing`
+3. If not and max retries not reached, call `registerServiceWithPassingHealth()` to re-register
+4. On retry failure, increase backoff time; on retry success, reset counter and restore original heartbeat frequency
+
+### Container Environment Adaptation
+
+The module automatically resolves the service's reachable address via `figureOutListenOn`:
+
+1. Check `POD_IP` environment variable (injected by Kubernetes container environment)
+2. Use go-zero `netx.InternalIp()` to get system internal IP
+3. Fall back to configured listen address
+
+> Address resolution is triggered when `listenOn` host is `0.0.0.0`. Non-`0.0.0.0` addresses remain unchanged.
+
+### Service Discovery URL Parameters
+
+The `consul://` scheme gRPC resolver is auto-registered via `init()`. URL format:
+
+```
+consul://[user:passwd]@host/service?param=value
+```
+
+| Parameter | Type | Default | Description |
+|------|------|--------|------|
+| `healthy` | bool | `false` | Whether to query only healthy services |
+| `tag` | string | `""` | Service tag filter |
+| `wait` | duration | - | Consul blocking query wait time |
+| `timeout` | duration | - | Query timeout |
+| `max-backoff` | duration | `1s` | Max backoff time on fetch failure |
+| `near` | string | `_agent` | Sort by distance for nearest access |
+| `limit` | int | `0` | Limit number of returned services (0 = no limit) |
+| `insecure` | bool | `false` | Whether to skip TLS verification |
+| `token` | string | `""` | Consul ACL access token |
+| `dc` | string | `""` | Datacenter |
+| `allow-stale` | bool | `false` | Whether to allow stale data |
+| `require-consistent` | bool | `false` | Whether to require consistent read |
+
+### Graceful Shutdown
+
+`RegisterService()` internally registers a shutdown callback via `proc.AddShutdownListener`, which is automatically executed on program exit:
+
+1. Stop all monitor goroutines (close stop channel)
+2. Call `ServiceDeregister` to deregister the service
+3. Log deregistration result
+
+> In go-zero environments, manual deregistration is not needed; in non-go-zero environments, use `defer service.DeregisterService()` to ensure deregistration.
+
+## Complete Examples
+
+### Using in go-zero
+
+```go
+// internal/config/config.go
+type Config struct {
+    rest.RestConf
+    Consul consul.Conf
+}
+```
+
+```yaml
+# etc/config.yaml
+Name: user-api
+Host: 0.0.0.0
+Port: 8888
+
+Consul:
+  Host: 127.0.0.1:8500
+  Key: user-service
+  CheckType: ttl
+  TTL: 20
+  Tag:
+    - v1
+    - grpc
+```
+
+```go
+// internal/svc/servicecontext.go
+type ServiceContext struct {
+    Config    config.Config
+    ConsulSrv consul.Client
+}
+
+func NewServiceContext(c config.Config) *ServiceContext {
+    consulSrv := consul.MustNewService(
+        fmt.Sprintf("%s:%d", c.Host, c.Port),
+        c.Consul,
+    )
+
+    if err := consulSrv.RegisterService(); err != nil {
+        logx.Must(err)
+    }
+
+    return &ServiceContext{
+        Config:    c,
+        ConsulSrv: consulSrv,
+    }
+}
+```
+
+### Standalone Usage
+
+```go
+package main
+
+import (
+    "fmt"
+
+    "github.com/lerity-yao/czt-contrib/registercenter/consul"
+)
+
+func main() {
+    conf := consul.Conf{
+        Host:      "127.0.0.1:8500",
+        Key:       "user-service",
+        CheckType: consul.CheckTypeTTL,
+        TTL:       20,
+        Tag:       []string{"v1", "grpc"},
+    }
+
+    service := consul.MustNewService(":8080", conf)
+
+    if err := service.RegisterService(); err != nil {
+        panic(err)
+    }
+    // In non-go-zero environments, manual deregistration is required
+    defer service.DeregisterService()
+
+    fmt.Println("service registered:", service.GetServiceID())
+    // Start your service...
+}
+```
+
+### Custom Monitor Functions
+
+```go
+conf := consul.Conf{
+    Host:      "127.0.0.1:8500",
+    Key:       "user-service",
+    CheckType: consul.CheckTypeTTL,
+    TTL:       20,
+}
+
+// Custom monitor function
+func customMonitorFunc() consul.MonitorFunc {
+    return func(cc *consul.CommonClient, stopCh <-chan struct{}) {
+        // Your custom monitor logic
+    }
+}
+
+service, _ := consul.NewService(":8080", conf,
+    consul.WithMonitorFuncs(
+        consul.TTLCheckMonitorFunc(),   // Keep default TTL monitoring
+        customMonitorFunc(),             // Append custom monitoring
+    ),
+)
+
+service.RegisterService()
+```
+
+### Service Discovery (gRPC Client)
+
+```go
+import (
+    "google.golang.org/grpc"
+    _ "github.com/lerity-yao/czt-contrib/registercenter/consul" // Auto-register resolver
+)
+
+func main() {
+    // Create gRPC connection using consul URL
+    conn, err := grpc.Dial(
+        "consul://127.0.0.1:8500/user-service?healthy=true&tag=v1",
+        grpc.WithInsecure(),
+        grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`),
+    )
+    if err != nil {
+        panic(err)
+    }
+    defer conn.Close()
+
+    // Create gRPC client and use it
+    // ...
+}
+```
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md)
 # Consul Service Registry Documentation
 
 [中文](./readme-cn.md)

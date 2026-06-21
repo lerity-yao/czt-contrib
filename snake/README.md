@@ -1,3 +1,292 @@
+# snake
+
+English | [中文](./readme-cn.md)
+
+A distributed unique ID generator based on the Snowflake algorithm, designed for the [go-zero](https://github.com/zeromicro/go-zero) framework. It supports **automatic WorkerID assignment**, **clock skew tolerance**, and **concurrent safety**.
+
+## Features
+
+- ❄️ **Snowflake Algorithm** — 64-bit ID: 1 sign bit + timestamp + WorkerID + sequence number, IDs are monotonically increasing
+- 🔧 **Flexible Bit Allocation** — `WorkerIDBits` / `SequenceBits` are configurable to accommodate clusters of different scales
+- 🤖 **Automatic WorkerID Assignment** — When no WorkerID is specified, it is automatically derived from a hash of `POD_IP` or the local machine IP
+- ⏱️ **Clock Skew Tolerance** — Small backward clock drifts are automatically waited out; drifts exceeding the threshold return an error
+- 🔒 **Concurrent Safety** — Lock-free generation via CAS, zero duplicates under high concurrency
+- 🔍 **ID Parsing** — Extract timestamp, WorkerID, and sequence number from any generated ID
+
+## Installation
+
+```bash
+go get github.com/lerity-yao/czt-contrib/snake
+```
+
+## Configuration
+
+### Conf
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `WorkerIDBits` | uint8 | No | 10 | Number of bits for WorkerID, determines the maximum number of worker nodes (2^WorkerIDBits - 1) |
+| `SequenceBits` | uint8 | No | 12 | Number of bits for the sequence number, determines the maximum IDs generated per millisecond (2^SequenceBits - 1) |
+| `Epoch` | int64 | No | 1704067200000 | Start timestamp (milliseconds), i.e. 2024-01-01 00:00:00 UTC, used to reduce ID length |
+| `TimeDifference` | int64 | No | 5 | Clock skew tolerance (milliseconds); small backward drifts within this range are automatically waited out |
+| `WorkerID` | int64 | No | 0 | Manually specified WorkerID; when set to 0, it is auto-calculated from the IP address |
+
+> **Constraint**: `WorkerIDBits + SequenceBits` must not exceed 63; otherwise `Validate()` returns an error.
+
+## API Reference
+
+### Constructors
+
+| Function | Signature | Description |
+|----------|-----------|-------------|
+| `MustNewSnake` | `func MustNewSnake(snakeConf Conf) Snake` | Creates a Snake instance; panics if validation fails |
+| `NewSnake` | `func NewSnake(conf Conf) (Snake, error)` | Creates a Snake instance; returns an error if validation fails |
+
+> `NewSnake` internally calls `conf.Validate()` to validate the configuration, and computes `maxWorkerID`, `maxSequence`, bit shifts, and WorkerID.
+
+### Snake Interface Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `Generator` | `Generator() (int64, error)` | Generates a unique ID; concurrency-safe |
+| `ParseID` | `ParseID(id int64) (timestamp int64, workerID int64, sequence int64)` | Parses the timestamp, WorkerID, and sequence number from an ID |
+| `GetTimestampFromID` | `GetTimestampFromID(id int64) int64` | Extracts the timestamp (milliseconds) from an ID |
+| `GetWorkerIDFromID` | `GetWorkerIDFromID(id int64) int64` | Extracts the WorkerID from an ID |
+| `GetSequenceFromID` | `GetSequenceFromID(id int64) int64` | Extracts the sequence number from an ID |
+| `GetTimeFromID` | `GetTimeFromID(id int64) time.Time` | Extracts the time from an ID, returning a `time.Time` object |
+
+## Advanced Guide
+
+### Snowflake Bit Layout
+
+A 64-bit ID is composed of three parts (the highest bit is the sign bit, always 0):
+
+```
+| 0 | ←——— Timestamp (41 bits) ———→ | ←— WorkerID —→ | ←—— Sequence ——→ |
+|   |   (currentTime - Epoch)        |  (WorkerIDBits) | (SequenceBits)   |
+```
+
+- **Timestamp**: `64 - 1 - WorkerIDBits - SequenceBits` bits, recording the difference `current millisecond timestamp - Epoch`. Under the default configuration this occupies 41 bits, providing approximately 69 years of usable range.
+- **WorkerID**: Number of bits determined by `WorkerIDBits`. Default is 10 bits, supporting up to 1,024 worker nodes.
+- **Sequence**: Number of bits determined by `SequenceBits`. Default is 12 bits, allowing up to 4,096 IDs per millisecond.
+
+#### ID Assembly Formula
+
+```go
+snowflake = ((timestamp - Epoch) << timestampLeftShift) |
+            (workerID << workerIDShift) |
+            sequence
+```
+
+Where:
+- `workerIDShift = SequenceBits`
+- `timestampLeftShift = SequenceBits + WorkerIDBits`
+
+#### Common Bit Allocation Schemes
+
+| Scheme | WorkerIDBits | SequenceBits | Timestamp Bits | Max Nodes | IDs/ms | Usable Lifespan |
+|--------|-------------|-------------|----------------|-----------|--------|-----------------|
+| Default | 10 | 12 | 41 | 1,024 | 4,096 | ~69 years |
+| Many Nodes | 13 | 10 | 40 | 8,192 | 1,024 | ~34 years |
+| High Throughput | 8 | 14 | 41 | 256 | 16,384 | ~69 years |
+
+### Clock Skew Handling
+
+When the current time is detected to be earlier than the timestamp of the last generated ID, Snake adopts different strategies based on the magnitude of the drift:
+
+| Drift Magnitude | Behavior |
+|----------------|----------|
+| ≤ `TimeDifference` ms | Spin-wait until the clock catches up, then generate the ID |
+| > `TimeDifference` ms | Return an error immediately and refuse to generate the ID |
+
+```go
+// Clock skew tolerance is 5ms (default)
+id, err := s.Generator()
+if err != nil {
+    // err: "clock moved backwards, refusing to generate id for X milliseconds"
+}
+```
+
+> **Recommendation**: Use NTP to keep clocks synchronized in production; avoid setting `TimeDifference` too high, as it will block `Generator` for an extended period.
+
+### Automatic WorkerID Assignment
+
+When `Conf.WorkerID` is 0, Snake automatically computes the WorkerID with the following priority:
+
+1. Read the `POD_IP` environment variable
+2. If `POD_IP` is not set, call `netx.InternalIp()` to obtain the local intranet IP
+3. Strip dots from the IP address, apply FNV-1a 32-bit hashing, then map the result modulo to the range `[0, maxWorkerID]`
+
+```go
+// In Kubernetes, inject the Pod IP via the POD_IP environment variable
+// env: POD_IP=10.0.1.42
+
+conf := snake.Conf{
+    WorkerIDBits: 10,
+    SequenceBits: 12,
+    WorkerID:     0, // auto-assign
+}
+s := snake.MustNewSnake(conf)
+```
+
+> **Note**: Auto-assigned WorkerIDs are based on IP hashing; different IPs may hash to the same WorkerID (collision). When the number of nodes approaches `maxWorkerID`, it is recommended to specify WorkerID manually.
+
+### Concurrent Safety
+
+The `Generator` method uses CAS operations from `sync/atomic` to ensure concurrent safety:
+
+- **Same millisecond**: Atomically increments the sequence number via `CompareAndSwapInt64`, avoiding mutex locks
+- **New millisecond**: Atomically updates the timestamp via CAS and resets the sequence number to 0
+- **Sequence exhausted**: Spin-waits for the next millisecond without blocking other goroutines
+
+```go
+// Concurrency-safe, no additional locking required
+var wg sync.WaitGroup
+for i := 0; i < 100; i++ {
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        id, _ := s.Generator() // zero duplicates
+        _ = id
+    }()
+}
+wg.Wait()
+```
+
+### ID Parsing
+
+Extract individual components from a generated ID:
+
+```go
+id, _ := s.Generator()
+
+// Option 1: extract all components at once
+timestamp, workerID, sequence := s.ParseID(id)
+
+// Option 2: extract individual components as needed
+ts  := s.GetTimestampFromID(id)  // millisecond timestamp
+wid := s.GetWorkerIDFromID(id)   // WorkerID
+seq := s.GetSequenceFromID(id)   // sequence number
+t   := s.GetTimeFromID(id)       // time.Time object
+```
+
+> `GetTimestampFromID`, `GetWorkerIDFromID`, and `GetSequenceFromID` all delegate to `ParseID` internally.
+
+## Full Examples
+
+### Using with go-zero
+
+```go
+// internal/config/config.go
+type Config struct {
+    rest.RestConf
+    SnakeConf snake.Conf
+}
+```
+
+```yaml
+# etc/config.yaml
+Name: order-api
+Host: 0.0.0.0
+Port: 8888
+
+SnakeConf:
+  WorkerIDBits: 10
+  SequenceBits: 12
+  Epoch: 1704067200000
+  TimeDifference: 5
+  WorkerID: 0
+```
+
+```go
+// internal/svc/servicecontext.go
+type ServiceContext struct {
+    Config config.Config
+    Snake  snake.Snake
+}
+
+func NewServiceContext(c config.Config) *ServiceContext {
+    return &ServiceContext{
+        Config: c,
+        Snake:  snake.MustNewSnake(c.SnakeConf),
+    }
+}
+```
+
+```go
+// internal/logic/createorderlogic.go
+func (l *CreateOrderLogic) CreateOrder(req *types.CreateOrderReq) (*types.CreateOrderResp, error) {
+    id, err := l.svcCtx.Snake.Generator()
+    if err != nil {
+        return nil, err
+    }
+
+    // Use the generated ID...
+    timestamp, workerID, sequence := l.svcCtx.Snake.ParseID(id)
+    l.Logger.Infof("generated id=%d, timestamp=%d, workerID=%d, sequence=%d",
+        id, timestamp, workerID, sequence)
+
+    return &types.CreateOrderResp{ID: id}, nil
+}
+```
+
+### Standalone Usage
+
+```go
+package main
+
+import (
+    "fmt"
+    "time"
+
+    "github.com/lerity-yao/czt-contrib/snake"
+)
+
+func main() {
+    conf := snake.Conf{
+        WorkerIDBits:   10,
+        SequenceBits:   12,
+        Epoch:          1704067200000, // 2024-01-01 00:00:00 UTC
+        TimeDifference: 5,
+        WorkerID:       0, // auto-assign
+    }
+
+    s := snake.MustNewSnake(conf)
+
+    // Generate an ID
+    id, err := s.Generator()
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Generated ID: %d\n", id)
+
+    // Parse the ID
+    timestamp, workerID, sequence := s.ParseID(id)
+    fmt.Printf("Timestamp: %d, WorkerID: %d, Sequence: %d\n",
+        timestamp, workerID, sequence)
+
+    // Get a time.Time object
+    t := s.GetTimeFromID(id)
+    fmt.Printf("Time: %s\n", t.Format(time.RFC3339Nano))
+}
+```
+
+### Manually Specifying WorkerID
+
+```go
+conf := snake.Conf{
+    WorkerIDBits:   10,
+    SequenceBits:   12,
+    Epoch:          1704067200000,
+    TimeDifference: 5,
+    WorkerID:       42, // manually specified
+}
+s := snake.MustNewSnake(conf)
+```
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md)
 # Snake Snowflake ID Generator Documentation
 
 [中文](./readme-cn.md)

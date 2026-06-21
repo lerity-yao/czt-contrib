@@ -1,19 +1,17 @@
-# Snake 雪花算法 ID 生成器使用文档
+﻿# snake
 
 [English](./README.md)
 
-## 概述
-
-Snake 是一个基于雪花算法（Snowflake Algorithm）的分布式唯一 ID 生成器，适用于需要生成全局唯一标识符的分布式系统场景。它能够高效地生成具有时间顺序性的唯一 ID，避免了数据库自增主键的性能瓶颈。
+基于雪花算法（Snowflake）的分布式唯一 ID 生成器，专为 [go-zero](https://github.com/zeromicro/go-zero) 框架设计，支持 **WorkerID 自动分配**、**时钟回拨容忍**、**并发安全**。
 
 ## 特性
 
-- **高性能**：基于内存计算，无需数据库依赖
-- **唯一性**：保证分布式环境下的 ID 唯一性
-- **有序性**：生成的 ID 具有时间顺序性
-- **可配置**：支持灵活配置位数分配
-- **并发安全**：支持高并发环境下的 ID 生成
-- **容错性**：具备时钟回拨处理机制
+- ❄️ **雪花算法** — 64 位 ID：1 位符号 + 时间戳 + WorkerID + 序列号，ID 趋势递增
+- 🔧 **灵活位分配** — WorkerIDBits / SequenceBits 可配置，适应不同规模集群
+- 🤖 **WorkerID 自动分配** — 未指定 WorkerID 时，基于 POD_IP 或本机 IP 哈希自动计算
+- ⏱️ **时钟回拨容忍** — 小幅回拨自动等待恢复，超出阈值返回错误
+- 🔒 **并发安全** — 基于 CAS 无锁生成，高并发下零重复
+- 🔍 **ID 反解** — 一键从 ID 中提取时间戳、WorkerID、序列号
 
 ## 安装
 
@@ -21,283 +19,270 @@ Snake 是一个基于雪花算法（Snowflake Algorithm）的分布式唯一 ID 
 go get github.com/lerity-yao/czt-contrib/snake
 ```
 
+## 配置参数
 
-## 快速开始
+### Conf
 
-### 1. 创建 Snake 实例
+| 参数名 | 类型 | 必填 | 默认值 | 说明 |
+|--------|------|------|--------|------|
+| `WorkerIDBits` | uint8 | 否 | 10 | WorkerID 占用位数，决定最大工作节点数（2^WorkerIDBits - 1） |
+| `SequenceBits` | uint8 | 否 | 12 | 序列号占用位数，决定每毫秒最大 ID 生成数（2^SequenceBits - 1） |
+| `Epoch` | int64 | 否 | 1704067200000 | 起始时间戳（毫秒），即 2024-01-01 00:00:00 UTC，用于减少 ID 长度 |
+| `TimeDifference` | int64 | 否 | 5 | 时钟回拨容忍度（毫秒），小幅回拨在此范围内自动等待恢复 |
+| `WorkerID` | int64 | 否 | 0 | 手动指定 WorkerID；为 0 时自动根据 IP 计算 |
 
-推荐使用 [MustNewSnake](./snake.go) 进行初始化：
+> **约束**：`WorkerIDBits + SequenceBits` 不得超过 63，否则 `Validate()` 返回错误。
+
+## API 参考
+
+### 构造函数
+
+| 函数 | 签名 | 说明 |
+|------|------|------|
+| `MustNewSnake` | `func MustNewSnake(snakeConf Conf) Snake` | 创建 Snake 实例，校验失败 panic |
+| `NewSnake` | `func NewSnake(conf Conf) (Snake, error)` | 创建 Snake 实例，校验失败返回 error |
+
+> `NewSnake` 内部自动调用 `conf.Validate()` 校验配置，并计算 `maxWorkerID`、`maxSequence`、位移量与 WorkerID。
+
+### Snake 接口方法
+
+| 方法 | 签名 | 说明 |
+|------|------|------|
+| `Generator` | `Generator() (int64, error)` | 生成唯一 ID，并发安全 |
+| `ParseID` | `ParseID(id int64) (timestamp int64, workerID int64, sequence int64)` | 从 ID 中解析出时间戳、WorkerID、序列号 |
+| `GetTimestampFromID` | `GetTimestampFromID(id int64) int64` | 从 ID 中提取时间戳（毫秒） |
+| `GetWorkerIDFromID` | `GetWorkerIDFromID(id int64) int64` | 从 ID 中提取 WorkerID |
+| `GetSequenceFromID` | `GetSequenceFromID(id int64) int64` | 从 ID 中提取序列号 |
+| `GetTimeFromID` | `GetTimeFromID(id int64) time.Time` | 从 ID 中提取时间，返回 `time.Time` 对象 |
+
+## 进阶指南
+
+### 雪花算法位分配原理
+
+64 位 ID 由三部分拼接而成（最高位为符号位，始终为 0）：
+
+```
+| 0 | ←——— 时间戳（41 位）———→ | ←— WorkerID —→ | ←—— 序列号 ——→ |
+|   |   (currentTime - Epoch)   |  (WorkerIDBits)| (SequenceBits) |
+```
+
+- **时间戳**：`64 - 1 - WorkerIDBits - SequenceBits` 位，记录 `当前毫秒时间戳 - Epoch` 的差值。默认配置下占 41 位，约可用 69 年。
+- **WorkerID**：由 `WorkerIDBits` 决定位数。默认 10 位，最多支持 1024 个工作节点。
+- **序列号**：由 `SequenceBits` 决定位数。默认 12 位，每毫秒最多生成 4096 个 ID。
+
+#### ID 组装公式
+
+```go
+snowflake = ((timestamp - Epoch) << timestampLeftShift) |
+            (workerID << workerIDShift) |
+            sequence
+```
+
+其中：
+- `workerIDShift = SequenceBits`
+- `timestampLeftShift = SequenceBits + WorkerIDBits`
+
+#### 常见位分配方案
+
+| 方案 | WorkerIDBits | SequenceBits | 时间戳位数 | 最大节点数 | 每毫秒 ID 数 | 可用年限 |
+|------|-------------|-------------|-----------|-----------|-------------|---------|
+| 默认 | 10 | 12 | 41 | 1,024 | 4,096 | ~69 年 |
+| 多节点 | 13 | 10 | 40 | 8,192 | 1,024 | ~34 年 |
+| 高并发 | 8 | 14 | 41 | 256 | 16,384 | ~69 年 |
+
+### 时钟回拨处理
+
+当检测到当前时间小于上次生成 ID 的时间戳时，Snake 会根据回拨幅度采取不同策略：
+
+| 回拨幅度 | 处理方式 |
+|---------|---------|
+| ≤ `TimeDifference` 毫秒 | 自旋等待，直到时钟追上后再生成 ID |
+| > `TimeDifference` 毫秒 | 直接返回错误，拒绝生成 ID |
+
+```go
+// 回拨容忍度为 5ms（默认值）
+id, err := s.Generator()
+if err != nil {
+    // err: "clock moved backwards, refusing to generate id for X milliseconds"
+}
+```
+
+> **建议**：生产环境使用 NTP 保持时钟同步；`TimeDifference` 不宜设置过大，否则会阻塞 Generator 较长时间。
+
+### WorkerID 自动分配
+
+当 `Conf.WorkerID` 为 0 时，Snake 按以下优先级自动计算 WorkerID：
+
+1. 读取环境变量 `POD_IP`
+2. 若 `POD_IP` 不存在，调用 `netx.InternalIp()` 获取本机内网 IP
+3. 对 IP 地址去点后进行 FNV-1a 32 位哈希，再取模映射到 `[0, maxWorkerID]` 范围
+
+```go
+// Kubernetes 中通过 POD_IP 环境变量注入 Pod IP
+// env: POD_IP=10.0.1.42
+
+conf := snake.Conf{
+    WorkerIDBits: 10,
+    SequenceBits: 12,
+    WorkerID:     0, // 自动分配
+}
+s := snake.MustNewSnake(conf)
+```
+
+> **注意**：自动分配的 WorkerID 基于 IP 哈希，不同 IP 可能哈希到同一 WorkerID（碰撞）。在节点数接近 `maxWorkerID` 时，建议手动指定 WorkerID。
+
+### 并发安全
+
+`Generator` 方法内部使用 `sync/atomic` 的 CAS 操作保证并发安全：
+
+- **同毫秒**：通过 `CompareAndSwapInt64` 对序列号原子递增，避免互斥锁
+- **新毫秒**：通过 CAS 原子更新时间戳，并将序列号重置为 0
+- **序列号耗尽**：自旋等待下一毫秒，不会阻塞其他 goroutine
+
+```go
+// 并发安全，无需额外加锁
+var wg sync.WaitGroup
+for i := 0; i < 100; i++ {
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        id, _ := s.Generator() // 零重复
+        _ = id
+    }()
+}
+wg.Wait()
+```
+
+### ID 反解
+
+从已生成的 ID 中提取各部分信息：
+
+```go
+id, _ := s.Generator()
+
+// 方式一：一次提取所有部分
+timestamp, workerID, sequence := s.ParseID(id)
+
+// 方式二：按需单独提取
+ts  := s.GetTimestampFromID(id)  // 毫秒时间戳
+wid := s.GetWorkerIDFromID(id)   // WorkerID
+seq := s.GetSequenceFromID(id)   // 序列号
+t   := s.GetTimeFromID(id)       // time.Time 对象
+```
+
+> `GetTimestampFromID`、`GetWorkerIDFromID`、`GetSequenceFromID` 内部均委托 `ParseID` 实现。
+
+## 完整示例
+
+### 在 go-zero 中使用
+
+```go
+// internal/config/config.go
+type Config struct {
+    rest.RestConf
+    SnakeConf snake.Conf
+}
+```
+
+```yaml
+# etc/config.yaml
+Name: order-api
+Host: 0.0.0.0
+Port: 8888
+
+SnakeConf:
+  WorkerIDBits: 10
+  SequenceBits: 12
+  Epoch: 1704067200000
+  TimeDifference: 5
+  WorkerID: 0
+```
+
+```go
+// internal/svc/servicecontext.go
+type ServiceContext struct {
+    Config config.Config
+    Snake  snake.Snake
+}
+
+func NewServiceContext(c config.Config) *ServiceContext {
+    return &ServiceContext{
+        Config: c,
+        Snake:  snake.MustNewSnake(c.SnakeConf),
+    }
+}
+```
+
+```go
+// internal/logic/createorderlogic.go
+func (l *CreateOrderLogic) CreateOrder(req *types.CreateOrderReq) (*types.CreateOrderResp, error) {
+    id, err := l.svcCtx.Snake.Generator()
+    if err != nil {
+        return nil, err
+    }
+
+    // 使用生成的 ID...
+    timestamp, workerID, sequence := l.svcCtx.Snake.ParseID(id)
+    l.Logger.Infof("generated id=%d, timestamp=%d, workerID=%d, sequence=%d",
+        id, timestamp, workerID, sequence)
+
+    return &types.CreateOrderResp{ID: id}, nil
+}
+```
+
+### 独立使用
 
 ```go
 package main
 
 import (
     "fmt"
-	
+    "time"
+
     "github.com/lerity-yao/czt-contrib/snake"
 )
 
 func main() {
-    // 配置参数
-    conf := snake.Conf{
-        WorkerIDBits:   10,              // 工作节点ID占用位数，默认10位，最多1023个工作节点
-        SequenceBits:   12,              // 序列号占用位数，默认12位，每毫秒最多生成4096个ID
-        Epoch:          1704067200000,   // 起始时间戳（毫秒），默认值为2024-01-01 00:00:00
-        TimeDifference: 5,               // 时钟回拨容忍度（毫秒），默认5毫秒
-        WorkerID:       1,               // 工作节点ID，可选，若为0则自动根据IP计算
-    }
-
-    // 使用MustNewSnake创建实例（配置错误时会panic）
-    s := snake.MustNewSnake(conf)
-    
-    // 生成ID
-    id, err := s.Generator()
-    if err != nil {
-        log.Fatal("Failed to generate ID:", err)
-    }
-    fmt.Printf("Generated ID: %d\n", id)
-}
-```
-
-
-### 2. 使用 NewSnake 进行错误处理
-
-如果你需要处理初始化错误，也可以使用 [NewSnake](./snake.go)：
-
-```go
-s, err := snake.NewSnake(conf)
-if err != nil {
-    log.Fatal("Failed to create Snake:", err)
-}
-```
-
-
-## 基本使用
-
-### 生成唯一ID
-
-```go
-// 生成唯一ID
-id, err := s.Generator()
-if err != nil {
-    log.Printf("Error generating ID: %v", err)
-    return
-}
-
-fmt.Printf("Generated ID: %d\n", id)
-```
-
-
-### 解析ID
-
-```go
-// 解析ID
-timestamp, workerID, sequence := s.ParseID(id)
-fmt.Printf("Timestamp: %d, WorkerID: %d, Sequence: %d\n", timestamp, workerID, sequence)
-
-// 单独获取各部分
-timestamp = s.GetTimestampFromID(id)
-workerID = s.GetWorkerIDFromID(id)
-sequence = s.GetSequenceFromID(id)
-timeObj := s.GetTimeFromID(id) // 返回time.Time对象
-```
-
-
-## 配置详解
-
-| 配置项 | 类型 | 默认值 | 描述 |
-|--------|------|--------|------|
-| WorkerIDBits | uint8 | 10 | 工作节点ID占用的位数，决定了最大工作节点数（2^WorkerIDBits - 1） |
-| SequenceBits | uint8 | 12 | 序列号占用的位数，决定了每毫秒最大ID生成数（2^SequenceBits - 1） |
-| Epoch | int64 | 1704067200000 | 自定义起始时间戳（毫秒），用于减少ID长度 |
-| TimeDifference | int64 | 5 | 时钟回拨容忍度（毫秒），系统允许的最大时钟回拨时间 |
-| WorkerID | int64 | 0 | 工作节点ID，若为0则自动根据IP地址计算
-
-### 位数分配示例
-
-- **默认配置** (WorkerIDBits=10, SequenceBits=12):
-    - 总共41位用于时间戳（约69年）
-    - 10位用于工作节点ID（最多1023个节点）
-    - 12位用于序列号（每毫秒最多4096个ID）
-    - 1位符号位
-
-### 工作节点ID自动分配
-
-当 `WorkerID` 设置为 0 时，系统会根据以下规则自动分配工作节点ID：
-
-1. 优先读取环境变量 `POD_IP`
-2. 如果环境变量不存在，则获取本机内部IP地址
-3. 对IP地址进行哈希计算，得出工作节点ID
-
-## 高级用法
-
-### 1. 并发安全的ID生成
-
-```go
-func generateConcurrent(s snake.Snake, numGoroutines, idsPerGoroutine int) {
-    var wg sync.WaitGroup
-    idChan := make(chan int64, numGoroutines*idsPerGoroutine)
-    
-    for i := 0; i < numGoroutines; i++ {
-        wg.Add(1)
-        go func() {
-            defer wg.Done()
-            for j := 0; j < idsPerGoroutine; j++ {
-                id, err := s.Generator()
-                if err != nil {
-                    log.Printf("Error generating ID: %v", err)
-                    continue
-                }
-                idChan <- id
-            }
-        }()
-    }
-    
-    wg.Wait()
-    close(idChan)
-    
-    // 收集所有ID并验证唯一性
-    idSet := make(map[int64]bool)
-    for id := range idChan {
-        if idSet[id] {
-            log.Printf("Duplicate ID detected: %d", id)
-        }
-        idSet[id] = true
-    }
-    
-    fmt.Printf("Generated %d unique IDs\n", len(idSet))
-}
-```
-
-
-### 2. ID解析与验证
-
-```go
-func analyzeID(s snake.Snake, id int64) {
-    timestamp, workerID, sequence := s.ParseID(id)
-    
-    // 打印详细信息
-    t := time.UnixMilli(timestamp)
-    fmt.Printf("ID Analysis:\n")
-    fmt.Printf("  Full ID: %d\n", id)
-    fmt.Printf("  Timestamp: %d (%s)\n", timestamp, t.Format("2006-01-02 15:04:05.000"))
-    fmt.Printf("  Worker ID: %d\n", workerID)
-    fmt.Printf("  Sequence: %d\n", sequence)
-}
-```
-
-
-## 错误处理
-
-Snake 可能返回以下错误：
-
-1. **时钟回拨错误**：系统时间发生回拨超过容忍度
-2. **工作节点ID错误**：手动指定的WorkerID超出范围
-3. **IP获取失败**：自动分配WorkerID时无法获取IP地址
-
-```go
-id, err := s.Generator()
-if err != nil {
-    switch {
-    case strings.Contains(err.Error(), "clock moved backwards"):
-        // 处理时钟回拨错误
-        log.Printf("Clock issue: %v", err)
-    case strings.Contains(err.Error(), "WorkerID"):
-        // 处理WorkerID错误
-        log.Printf("Worker ID issue: %v", err)
-    default:
-        // 其他错误
-        log.Printf("Other error: %v", err)
-    }
-}
-```
-
-
-## 性能建议
-
-1. **复用Snake实例**：避免频繁创建Snake实例，应在程序初始化时创建并复用
-2. **合理配置位数**：根据业务需求合理分配时间戳、工作节点和序列号的位数
-3. **监控ID生成速率**：在高并发场景下监控ID生成性能
-4. **时区考虑**：注意Epoch时间戳与时区的关系
-
-## 最佳实践
-
-### 1. 初始化（推荐使用MustNew）
-
-```go
-var s snake.Snake
-
-func init() {
     conf := snake.Conf{
         WorkerIDBits:   10,
         SequenceBits:   12,
-        Epoch:          time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC).UnixMilli(),
+        Epoch:          1704067200000, // 2024-01-01 00:00:00 UTC
         TimeDifference: 5,
         WorkerID:       0, // 自动分配
     }
-    
-    // 使用MustNewSnake进行初始化，配置错误时会panic
-    s = snake.MustNewSnake(conf)
+
+    s := snake.MustNewSnake(conf)
+
+    // 生成 ID
+    id, err := s.Generator()
+    if err != nil {
+        panic(err)
+    }
+    fmt.Printf("Generated ID: %d\n", id)
+
+    // 解析 ID
+    timestamp, workerID, sequence := s.ParseID(id)
+    fmt.Printf("Timestamp: %d, WorkerID: %d, Sequence: %d\n",
+        timestamp, workerID, sequence)
+
+    // 获取 time.Time 对象
+    t := s.GetTimeFromID(id)
+    fmt.Printf("Time: %s\n", t.Format(time.RFC3339Nano))
 }
 ```
 
-
-### 2. 在应用启动时初始化
+### 手动指定 WorkerID
 
 ```go
-package main
-
-import (
-    "github.com/lerity-yao/czt-contrib/snake"
-)
-
-var GlobalSnake snake.Snake
-
-func main() {
-    // 应用启动时初始化
-    conf := snake.Conf{
-        WorkerIDBits: 10,
-        SequenceBits: 12,
-        Epoch:       1704067200000,
-        WorkerID:     1,
-    }
-    
-    GlobalSnake = snake.MustNewSnake(conf)
-    
-    // 启动应用...
+conf := snake.Conf{
+    WorkerIDBits:   10,
+    SequenceBits:   12,
+    Epoch:          1704067200000,
+    TimeDifference: 5,
+    WorkerID:       42, // 手动指定
 }
+s := snake.MustNewSnake(conf)
 ```
-
-
-## 注意事项
-
-1. **时间同步**：确保分布式系统的时钟同步，推荐使用NTP服务
-2. **ID长度**：生成的ID为64位长整型，注意存储和传输的兼容性
-3. **容量规划**：根据业务增长预估ID生成量，合理规划位数分配
-4. **监控告警**：对ID生成失败的情况建立监控和告警机制
-
-## 常见问题
-
-### Q: 如何选择合适的位数配置？
-
-A: 根据以下因素决定：
-- **WorkerIDBits**: 预计的最大机器数量
-- **SequenceBits**: 预计的单机QPS峰值
-- **时间戳位数**: 服务预计运行年限
-
-### Q: 时钟回拨如何处理？
-
-A:
-- 系统内置时钟回拨容忍机制，可在配置中调整 `TimeDifference`
-- 建议使用NTP确保系统时钟同步
-- 在关键业务中可结合其他唯一性约束
-
-### Q: ID的安全性如何？
-
-A:
-- 生成的ID具有一定可预测性（时间相关）
-- 如需加密ID，可在外部进行二次处理
-- 不建议直接暴露ID作为业务敏感信息
 
 ## 更新日志
 
