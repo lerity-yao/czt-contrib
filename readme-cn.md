@@ -34,6 +34,7 @@
 | cron | 基于 Redis 的分布式任务队列 | [README](./cron/README.md) |
 | aliyun/gateway | 阿里云 API 网关 Go 客户端 | [README](./aliyun/gateway/README.md) |
 | kong/hmacauth | Kong HMAC Auth 签名客户端 | [README](./kong/hmacauth/README.md) |
+| minio | MinIO 对象存储客户端，集成 P2C 负载均衡、写后读亲和、熔断器和可观测性 | [README](./minio/README.md) |
 
 ## 子模块质量报告
 
@@ -48,6 +49,7 @@
 | [cron](./cron) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/cron)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/cron) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/cron.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/cron) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cron/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cron/badges/download-count.svg) | [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=cron)](https://codecov.io/gh/lerity-yao/czt-contrib) |
 | [cztctl](./cztctl) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/cztctl)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/cztctl) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/cztctl.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/cztctl) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cztctl/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/cztctl/badges/download-count.svg) | |
 | [kong/hmacauth](./kong/hmacauth) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/kong/hmacauth)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/kong/hmacauth) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/kong/hmacauth.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/kong/hmacauth) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/kong/hmacauth/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/kong/hmacauth/badges/download-count.svg) | [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=kong-hmacauth)](https://codecov.io/gh/lerity-yao/czt-contrib) |
+| [minio](./minio) | [![Go Report Card](https://goreportcard.com/badge/github.com/lerity-yao/czt-contrib/minio)](https://goreportcard.com/report/github.com/lerity-yao/czt-contrib/minio) | [![Go Reference](https://pkg.go.dev/badge/github.com/lerity-yao/czt-contrib/minio.svg)](https://pkg.go.dev/github.com/lerity-yao/czt-contrib/minio) | [![goproxy](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/minio/badges/download-count.svg)](https://goproxy.cn/stats/github.com/lerity-yao/czt-contrib/minio/badges/download-count.svg) | [![codecov](https://codecov.io/gh/lerity-yao/czt-contrib/branch/main/graph/badge.svg?flag=minio)](https://codecov.io/gh/lerity-yao/czt-contrib) |
 
 ## 快速开始
 

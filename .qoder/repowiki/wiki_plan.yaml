@@ -1,0 +1,32 @@
+version: 1
+
+scope:
+  include: []
+  exclude:
+    - ".idea/**"
+    - ".github/**"
+
+repowiki:
+  template: architecture
+  notes:
+    - text: "本项目是基于 go-zero 生态的微服务治理组件库，采用 Go 多模块(multi-module)结构，每个子目录是独立的 Go module，有各自的 go.mod。"
+      author: maintainer
+    - text: "cztctl 是项目的核心代码生成工具，内含两套解析器实现：默认的 ANTLR4 方案和实验性的手写递归下降解析器（通过 CZTCTL_EXPERIMENTAL=on 启用），两者共用同一套 spec.ApiSpec 中间表示。"
+      author: maintainer
+    - text: "cron 和 rabbitmq 的 DSL 文件（.cron / .rabbitmq）共用同一个解析入口 parser.Parse()，通过文件后缀自动区分类型，在语义分析阶段做特化处理。"
+      author: maintainer
+    - text: "每个运行时组件（cron、rabbitmq、snake、configcenter/consul、registercenter/consul、aliyun/gateway、kong/hmacauth）都深度集成 OpenTelemetry tracing 和 Prometheus metrics，遵循拦截器链模式。"
+      author: maintainer
+    - text: "Wiki 既要覆盖各模块的内部架构设计（解析器流程、拦截器链、重连策略等），也要包含面向接入方的使用指南和配置参考。"
+      author: maintainer
+    - text: "项目文档语言为中文，wiki 内容应使用中文撰写。"
+      author: maintainer
+
+knowledgecard:
+  notes:
+    - text: "模块划分应按独立 go.mod 边界识别：cztctl、cron、mq/rabbitmq、snake、configcenter/consul、registercenter/consul、aliyun/gateway、aliyun/oss、kong/hmacauth、responsex 各为独立模块。"
+      author: maintainer
+    - text: "cztctl 内部应按功能域进一步拆分知识卡：解析器（parser + pkg/parser/extension）、代码生成（api/cron、api/rabbitmq）、RPC SDK（rpc/sdk）、Swagger（api/swagger）。"
+      author: maintainer
+    - text: "注意区分 ANTLR 自动生成的代码（g4/gen/）和手写的 AST/parser 代码，知识卡应侧重描述手写部分的设计意图和扩展方式。"
+      author: maintainer
