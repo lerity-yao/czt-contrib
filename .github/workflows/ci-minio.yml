@@ -1,0 +1,39 @@
+name: CI / minio
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+    paths:
+      - 'minio/**'
+      - '.github/workflows/ci-minio.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: minio
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: minio/go.sum
+
+      - name: Test with race detector
+        run: go test -race -coverprofile=coverage.txt -timeout=60s .
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: minio/coverage.txt
+          flags: minio
+          name: minio
+          fail_ci_if_error: false
+          verbose: true
